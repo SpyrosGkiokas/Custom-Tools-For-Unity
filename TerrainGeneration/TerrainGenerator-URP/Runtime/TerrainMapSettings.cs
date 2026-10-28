@@ -52,6 +52,11 @@ namespace CustomTools.TerrainGenerationURP
                  "generated separately will not line up.")]
         public bool normalizeHeights = true;
 
+        [Header("Erosion")]
+        [Tooltip("Hydraulic erosion. Carves drainage networks and settles sediment, " +
+                 "which is what makes terrain read as weathered rather than as noise.")]
+        public ErosionSettings erosion = new ErosionSettings();
+
         [Header("Edges")]
         public FalloffMode falloffMode = FalloffMode.None;
 

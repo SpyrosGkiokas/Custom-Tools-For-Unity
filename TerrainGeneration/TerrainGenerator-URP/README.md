@@ -45,6 +45,39 @@ responsiveness even when the 2D map is set higher.
 
 Your mode and resolution choices persist across sessions.
 
+### Erosion
+
+Hydraulic erosion is what separates generated terrain from obvious noise. It simulates
+rain droplets running downhill, picking up sediment on steep ground and dropping it on
+flat ground. Run over tens of thousands of droplets this carves branching drainage
+networks and settles sediment into the valleys — structure no amount of noise octaves can
+produce, because it comes from a process rather than a frequency.
+
+Turn it on with **Erosion > Enabled**. It is off by default since it costs time.
+
+| Field | What it does |
+|---|---|
+| **Iterations** | Droplets simulated. The main quality dial — 50k is a good default, 100k+ for hero terrain. |
+| **Max Droplet Lifetime** | Steps a droplet may travel. Longer lets rivers run further. |
+| **Erosion Radius** | How wide one erosion event cuts. Larger carves broad smooth valleys, smaller cuts sharp gullies. |
+| **Inertia** | How much a droplet keeps its heading versus following the slope. Low hugs the steepest descent; high wanders and smears. |
+| **Sediment Capacity Factor** | How much the water can carry. Higher erodes far more aggressively. |
+| **Erode / Deposit Speed** | How fast material is picked up and dropped. |
+| **Evaporate Speed** | How fast droplets dry up. Higher gives shorter rivers. |
+| **Gravity** | Downhill acceleration, which feeds carrying capacity. |
+
+Erosion runs **after** the height curve and falloff, so it weathers the final shape rather
+than detail that would later be flattened away.
+
+**Cost.** Roughly 350ms at 513px with 50k droplets, or ~1.1s at 1025px with 100k, so
+Generate stays interactive. A cancellable progress bar appears while it runs. The
+Inspector preview scales the droplet count down to the preview resolution, so what you see
+matches what you will get.
+
+**The flow map.** Erosion also produces a 0..1 map of how much water crossed each cell,
+available as `builder.LastFlow`. Rivers and wet valley floors read high, ridges read zero —
+useful as a mask for river beds, or for texturing wet ground differently from dry.
+
 ### URP setup
 
 Generating with no setup at all gives you a **grey checkered terrain**. That is the
@@ -203,6 +236,9 @@ inspect is what you get.
   the placeholder — assign a `TerrainLayer` to every rule to texture it.
 - **Terrain magenta?** A material using a Built-in pipeline shader is assigned. Clear
   **Terrain Material** to let the builder generate the right one.
+- **Terrain looks like noise, not landscape?** Turn on **Erosion**. Nothing else
+  comes close for realism.
+- **Erosion too aggressive?** Lower Sediment Capacity Factor, or drop Iterations.
 - **Terrain too noisy?** Lower Scale first, then drop Persistence.
 - **Too flat or samey?** Raise World Height. Check Normalize Heights is on.
 - **Want mountain ranges, not lumps?** `Ridged` noise, Scale around 1.5–2.5.

@@ -16,6 +16,8 @@ Procedural heightmap terrain with a live Inspector preview. Design a map by drag
 sliders, then generate it as a real Unity `Terrain` — or build it at runtime from a seed
 for per-run maps.
 
+- **Hydraulic erosion** — simulated rainfall carves drainage networks and settles
+  sediment, the structure that makes terrain read as weathered rather than generated
 - Three noise shapes — rolling hills (fBm), sharp mountain ridges, canyons and plateaus
 - Island, radial and basin edge falloff for maps that end in water or a crater rim
 - Automatic texturing by height **and slope**, so cliffs get rock and peaks get snow

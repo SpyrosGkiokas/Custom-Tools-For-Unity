@@ -34,7 +34,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 if (GUILayout.Button("Generate", GUILayout.Height(30)))
                 {
                     Undo.RegisterFullObjectHierarchyUndo(_builder.gameObject, "Generate Terrain");
-                    _builder.Build();
+                    BuildWithProgress();
                     MarkSceneDirty();
                 }
 
@@ -45,7 +45,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                     EditorUtility.SetDirty(_builder.settings);
 
                     Undo.RegisterFullObjectHierarchyUndo(_builder.gameObject, "Generate Terrain");
-                    _builder.Build();
+                    BuildWithProgress();
                     MarkSceneDirty();
                 }
             }
@@ -55,6 +55,40 @@ namespace CustomTools.TerrainGeneration.EditorTools
 
             EditorGUILayout.Space();
             DrawSaveSection();
+        }
+
+        /// <summary>
+        /// Builds with a cancellable progress bar. Erosion at high droplet counts takes
+        /// long enough that a frozen editor would look like a hang.
+        /// </summary>
+        void BuildWithProgress()
+        {
+            bool cancelled = false;
+
+            _builder.ProgressHandler = progress =>
+            {
+                // The bar is only worth showing for the erosion pass; everything else
+                // finishes before a single repaint.
+                cancelled = EditorUtility.DisplayCancelableProgressBar(
+                    "Generating Terrain",
+                    $"Eroding… {progress * 100f:F0}%",
+                    progress);
+                return !cancelled;
+            };
+
+            try
+            {
+                _builder.Build();
+            }
+            finally
+            {
+                // Leaving the bar up would lock the editor behind an invisible modal.
+                EditorUtility.ClearProgressBar();
+                _builder.ProgressHandler = null;
+            }
+
+            if (cancelled)
+                Debug.Log("Terrain generation cancelled; the terrain shows partial erosion.", _builder);
         }
 
         void DrawSaveSection()

@@ -15,6 +15,26 @@ namespace CustomTools.TerrainGeneration
         /// </summary>
         public static float[,] GenerateHeights(TerrainMapSettings settings)
         {
+            return GenerateHeights(settings, out _, null);
+        }
+
+        /// <summary>
+        /// Generates a normalized heightmap, also returning the water flow map that
+        /// erosion produced and reporting progress while it runs.
+        /// </summary>
+        /// <param name="flow">
+        /// Receives a 0..1 map of how much water crossed each cell, or null when
+        /// erosion is disabled. Useful for texturing river beds.
+        /// </param>
+        /// <param name="onProgress">
+        /// Progress callback for the erosion pass, which is the slow part. Return false
+        /// to cancel. Ignored when erosion is disabled.
+        /// </param>
+        public static float[,] GenerateHeights(
+            TerrainMapSettings settings,
+            out float[,] flow,
+            System.Func<float, bool> onProgress)
+        {
             int res = settings.Resolution;
             var heights = new float[res, res];
 
@@ -62,6 +82,22 @@ namespace CustomTools.TerrainGeneration
 
                     heights[y, x] = Mathf.Clamp01(h);
                 }
+            }
+
+            // Pass 3: erosion, last, so it weathers the final shaped surface rather
+            // than detail that falloff or the curve would later flatten away.
+            flow = null;
+            if (settings.erosion != null && settings.erosion.enabled && settings.erosion.iterations > 0)
+            {
+                flow = new float[res, res];
+                Erosion.Apply(heights, settings.erosion, settings.seed, flow, onProgress);
+
+                // Deposited sediment can mound a cell above 1.0, which TerrainData
+                // rejects. Clamp rather than renormalize: rescaling the whole map
+                // would undo the erosion's carefully carved relative depths.
+                for (int y = 0; y < res; y++)
+                    for (int x = 0; x < res; x++)
+                        heights[y, x] = Mathf.Clamp01(heights[y, x]);
             }
 
             return heights;

@@ -265,12 +265,23 @@ namespace CustomTools.TerrainGeneration.EditorTools
 
             // Generate at the preview resolution, not the asset's, then put the
             // asset's value back so the built terrain is unaffected.
-            var original = _settings.resolution;
+            var originalResolution = _settings.resolution;
             _settings.resolution = (TerrainMapSettings.TerrainResolution)_previewResolution;
+
+            // Droplet counts are tuned against the real resolution. Reused unchanged at
+            // a smaller preview they would over-erode, so scale by the area ratio and
+            // the preview reflects what the built terrain will actually look like.
+            int originalIterations = _settings.erosion != null ? _settings.erosion.iterations : 0;
+            if (_settings.erosion != null && _settings.erosion.enabled)
+            {
+                int full = (int)originalResolution;
+                float areaRatio = (float)(_previewResolution * _previewResolution) / (full * full);
+                _settings.erosion.iterations = Mathf.Max(1, (int)(originalIterations * areaRatio));
+            }
 
             try
             {
-                _heights = TerrainMapGenerator.GenerateHeights(_settings);
+                _heights = TerrainMapGenerator.GenerateHeights(_settings, out _, null);
 
                 if (_preview != null) DestroyImmediate(_preview);
                 _preview = TerrainMapGenerator.GeneratePreview(_settings, _heights);
@@ -279,8 +290,9 @@ namespace CustomTools.TerrainGeneration.EditorTools
             }
             finally
             {
-                // Restore even if generation throws, or the asset keeps the preview resolution.
-                _settings.resolution = original;
+                // Restore even if generation throws, or the asset keeps the preview values.
+                _settings.resolution = originalResolution;
+                if (_settings.erosion != null) _settings.erosion.iterations = originalIterations;
             }
         }
 

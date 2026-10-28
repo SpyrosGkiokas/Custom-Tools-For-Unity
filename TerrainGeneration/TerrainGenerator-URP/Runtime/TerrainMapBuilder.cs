@@ -38,6 +38,23 @@ namespace CustomTools.TerrainGenerationURP
         /// <summary>The heightmap from the last build. Useful for placing objects on the surface.</summary>
         public float[,] LastHeights { get; private set; }
 
+        /// <summary>
+        /// Water flow from the last build's erosion pass, 0..1 per cell, or null when
+        /// erosion is disabled. Useful as a mask for river beds and wet ground.
+        /// </summary>
+        public float[,] LastFlow { get; private set; }
+
+        /// <summary>
+        /// Raised during generation with 0..1 progress. Return false to cancel.
+        /// The editor hooks this to show a progress bar; game code can ignore it.
+        /// </summary>
+        public System.Func<float, bool> ProgressHandler { get; set; }
+
+        bool OnGenerationProgress(float progress)
+        {
+            return ProgressHandler == null || ProgressHandler(progress);
+        }
+
         void Awake()
         {
             if (generateOnAwake) Build();
@@ -55,8 +72,9 @@ namespace CustomTools.TerrainGenerationURP
             if (randomizeSeedOnAwake && Application.isPlaying)
                 settings.seed = Random.Range(int.MinValue, int.MaxValue);
 
-            var heights = TerrainMapGenerator.GenerateHeights(settings);
+            var heights = TerrainMapGenerator.GenerateHeights(settings, out var flow, OnGenerationProgress);
             LastHeights = heights;
+            LastFlow = flow;
 
             var terrain = EnsureTerrain();
             var data = terrain.terrainData;
