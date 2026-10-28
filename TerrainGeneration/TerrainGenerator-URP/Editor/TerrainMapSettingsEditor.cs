@@ -217,7 +217,7 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
 
             string summary = enabled.boolValue ? $"on · {angle.floatValue:0}°" : "off";
 
-            if (!InspectorSections.Foldout("thermal", "Thermal Erosion (Talus)", summary)) return;
+            if (!InspectorSections.Foldout("thermal", "Thermal Erosion", summary, true)) return;
 
             using (new EditorGUI.IndentLevelScope())
             {
@@ -254,7 +254,7 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
             if (strata.FindPropertyRelative("enabled").boolValue) parts.Add("strata");
             string summary = parts.Count == 0 ? "off" : string.Join(" · ", parts);
 
-            if (!InspectorSections.Foldout("detail", "Detail & Rivers", summary)) return;
+            if (!InspectorSections.Foldout("detail", "Detail & Rivers", summary, true)) return;
 
             using (new EditorGUI.IndentLevelScope())
             {
@@ -385,8 +385,8 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
                 {
                     EditorGUILayout.PropertyField(iterations, new GUIContent("Strength"));
 
-                    var hintRect = EditorGUILayout.GetControlRect(false, 13f);
-                    hintRect.xMin += EditorGUIUtility.labelWidth + 2f;
+                    var hintRect = InspectorSections.ValueColumn(
+                        EditorGUILayout.GetControlRect(false, 13f));
                     GUI.Label(hintRect, $"droplets simulated · about {EstimateErosionMs(iterations.intValue)} ms", HintStyle);
 
                     InspectorSections.SliderWithHint(
@@ -424,7 +424,7 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
                 ? "no falloff"
                 : falloffMode.enumDisplayNames[falloffMode.enumValueIndex].ToLowerInvariant();
 
-            if (!InspectorSections.Foldout("edges", "Edges & Water", summary)) return;
+            if (!InspectorSections.Foldout("edges", "Edges & Water", summary, true)) return;
 
             using (new EditorGUI.IndentLevelScope())
             {
@@ -510,8 +510,8 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
         {
             if (_heights == null) return;
 
-            var rect = EditorGUILayout.GetControlRect(false, 54f);
-            rect.xMin += EditorGUIUtility.labelWidth + 2f;
+            var rect = InspectorSections.ValueColumn(
+                EditorGUILayout.GetControlRect(false, 54f));
 
             if (Event.current.type != EventType.Repaint) return;
 
@@ -556,8 +556,8 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
             var rules = _settings.layerRules;
             if (rules == null || rules.Length == 0) return;
 
-            var rect = EditorGUILayout.GetControlRect(false, 18f + rules.Length * 14f);
-            rect.xMin += EditorGUIUtility.labelWidth + 2f;
+            var rect = InspectorSections.ValueColumn(
+                EditorGUILayout.GetControlRect(false, 18f + rules.Length * 14f));
 
             if (Event.current.type != EventType.Repaint) return;
 

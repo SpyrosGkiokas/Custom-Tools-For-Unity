@@ -32,6 +32,39 @@ namespace CustomTools.TerrainGeneration.EditorTools
             normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
         };
 
+        // Reused for width measurement: CalcSize needs a GUIContent, and allocating one
+        // per section per repaint is exactly the churn the preview work removed.
+        static readonly GUIContent MeasureContent = new GUIContent();
+
+        static GUIContent TempContent(string text)
+        {
+            MeasureContent.text = text;
+            return MeasureContent;
+        }
+
+        /// <summary>
+        /// Trims a full-width control rect down to the value column, where a caption or
+        /// a drawing should line up with the fields above it. EditorGUIUtility.labelWidth
+        /// is measured from the unindented left edge, so using it raw inside a nested
+        /// scope leaves the content misaligned and, at a narrow Inspector, clipped.
+        /// </summary>
+        public static Rect ValueColumn(Rect rect)
+        {
+            // GetControlRect already returns a rect inset by the current indent, while
+            // labelWidth is measured from the unindented edge. So inside an indent the
+            // label occupies labelWidth minus that inset, and adding labelWidth whole
+            // would push the content one indent too far right.
+            float indent = EditorGUI.indentLevel * 15f;
+            float labelColumn = Mathf.Max(20f, EditorGUIUtility.labelWidth - indent);
+
+            rect.xMin += labelColumn + 2f;
+
+            // Keep a usable width at narrow Inspector sizes rather than inverting.
+            if (rect.width < 40f) rect.xMin = Mathf.Max(rect.x, rect.xMax - 40f);
+
+            return rect;
+        }
+
         // EditorPrefs reads hit the registry, and Foldout runs for every section on
         // every repaint. The open state is cached in memory and written through only
         // when it actually changes.
@@ -65,24 +98,35 @@ namespace CustomTools.TerrainGeneration.EditorTools
         /// <param name="defaultOpen">Open state the first time this section is seen.</param>
         public static bool Foldout(string key, string label, string summary = null, bool defaultOpen = false)
         {
-            string prefKey = $"CustomTools.TerrainGeneration.section.{key}";
+            string prefKey = $"CustomTools.TerrainGeneration.section.v2.{key}";
             bool open = GetState(prefKey, defaultOpen);
 
             var rect = GUILayoutUtility.GetRect(1f, EditorGUIUtility.singleLineHeight + 6f);
 
-            // Draw the summary first so the foldout's own hit area stays on top;
-            // otherwise clicking near the summary misses the toggle.
-            if (!string.IsNullOrEmpty(summary))
-            {
-                var summaryRect = rect;
-                summaryRect.xMin = rect.xMax - 160f;
-                summaryRect.xMax = rect.xMax - 6f;
-
-                GUI.Label(summaryRect, summary, SummaryStyle);
-            }
-
             bool newOpen = EditorGUI.BeginFoldoutHeaderGroup(rect, open, label, HeaderStyle);
             EditorGUI.EndFoldoutHeaderGroup();
+
+            // Drawn after the header so it sits on top of the header's background,
+            // and only when there is room left beside the title — at a narrow
+            // Inspector width the summary is dropped rather than printed over the
+            // section name.
+            if (!string.IsNullOrEmpty(summary))
+            {
+                float titleWidth = HeaderStyle.CalcSize(TempContent(label)).x + 24f;
+                float available = rect.width - titleWidth - 10f;
+
+                if (available > 40f)
+                {
+                    float summaryWidth = Mathf.Min(
+                        available, SummaryStyle.CalcSize(TempContent(summary)).x + 6f);
+
+                    var summaryRect = rect;
+                    summaryRect.xMin = rect.xMax - summaryWidth - 6f;
+                    summaryRect.xMax = rect.xMax - 6f;
+
+                    GUI.Label(summaryRect, summary, SummaryStyle);
+                }
+            }
 
             if (newOpen != open) SetState(prefKey, newOpen);
 
@@ -95,15 +139,18 @@ namespace CustomTools.TerrainGeneration.EditorTools
         /// </summary>
         public static bool Advanced(string key, string hint = null)
         {
-            string prefKey = $"CustomTools.TerrainGeneration.advanced.{key}";
+            string prefKey = $"CustomTools.TerrainGeneration.advanced.v2.{key}";
             bool open = GetState(prefKey, false);
 
             string label = string.IsNullOrEmpty(hint) || open ? "Advanced" : $"Advanced  ({hint})";
 
-            using (new EditorGUILayout.HorizontalScope())
+            // EditorStyles.foldout, not a label style: a label style draws no disclosure
+            // triangle, which left these reading as inert text rather than something to
+            // click. The indent comes from indentLevel so it lines up with the fields
+            // around it instead of a hand-rolled Space.
+            using (new EditorGUI.IndentLevelScope())
             {
-                GUILayout.Space(12f);
-                bool newOpen = EditorGUILayout.Foldout(open, label, true, EditorStyles.miniBoldLabel);
+                bool newOpen = EditorGUILayout.Foldout(open, label, true, EditorStyles.foldout);
                 if (newOpen != open) SetState(prefKey, newOpen);
                 open = newOpen;
             }
@@ -121,8 +168,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
         {
             EditorGUILayout.PropertyField(property, new GUIContent(label));
 
-            var rect = EditorGUILayout.GetControlRect(false, 13f);
-            rect.xMin += EditorGUIUtility.labelWidth + 2f;
+            var rect = ValueColumn(EditorGUILayout.GetControlRect(false, 13f));
             GUI.Label(rect, $"{lowHint}  ←→  {highHint}", HintStyle);
         }
     }
