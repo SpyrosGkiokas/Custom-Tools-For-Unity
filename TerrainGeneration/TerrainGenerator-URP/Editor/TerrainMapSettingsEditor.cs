@@ -79,12 +79,387 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
 
         public override void OnInspectorGUI()
         {
+            serializedObject.Update();
+
             EditorGUI.BeginChangeCheck();
-            DrawDefaultInspector();
-            if (EditorGUI.EndChangeCheck()) _dirty = true;
+
+            DrawPresetBar();
+            DrawSections();
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+                _dirty = true;
+            }
 
             EditorGUILayout.Space();
             DrawPreviewSection();
+        }
+
+        // --- preset bar ----------------------------------------------------
+
+        void DrawPresetBar()
+        {
+            var presets = TerrainPresets.FindAll();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Preset", GUILayout.Width(44f));
+
+                if (presets.Count == 0)
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                        EditorGUILayout.LabelField("none found", EditorStyles.miniLabel);
+                }
+                else
+                {
+                    // Index 0 is a prompt rather than a preset: applying one is an action,
+                    // not a state, so the popup should not claim a current selection.
+                    var names = new string[presets.Count + 1];
+                    names[0] = "Load a preset…";
+                    for (int i = 0; i < presets.Count; i++) names[i + 1] = presets[i].name;
+
+                    int picked = EditorGUILayout.Popup(0, names);
+                    if (picked > 0)
+                    {
+                        TerrainPresets.Apply(presets[picked - 1], _settings);
+                        serializedObject.Update();
+                        _dirty = true;
+                    }
+                }
+
+                if (GUILayout.Button("Save As…", GUILayout.Width(74f)))
+                {
+                    var saved = TerrainPresets.SaveAsNew(_settings);
+                    if (saved != null) EditorGUIUtility.PingObject(saved);
+                }
+            }
+
+            EditorGUILayout.Space(2f);
+        }
+
+        // --- sections ------------------------------------------------------
+
+        void DrawSections()
+        {
+            DrawShapeSection();
+            DrawErosionSection();
+            DrawEdgesSection();
+            DrawWorldSection();
+            DrawLayersSection();
+        }
+
+        void DrawShapeSection()
+        {
+            var noise = serializedObject.FindProperty("noise");
+            var noiseType = noise.FindPropertyRelative("noiseType");
+
+            if (!InspectorSections.Foldout("shape", "Shape", noiseType.enumDisplayNames[noiseType.enumValueIndex], true))
+                return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(noiseType, new GUIContent("Noise Type"));
+
+                InspectorSections.SliderWithHint(
+                    noise.FindPropertyRelative("scale"), "Feature Size",
+                    "larger features", "finer detail");
+
+                EditorGUILayout.PropertyField(
+                    noise.FindPropertyRelative("octaves"), new GUIContent("Detail Levels"));
+
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty("heightCurve"), new GUIContent("Height Curve"));
+
+                DrawCurveStrip();
+
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty("normalizeHeights"), new GUIContent("Normalize Heights"));
+
+                if (InspectorSections.Advanced("shape", "persistence, lacunarity, offset"))
+                {
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        EditorGUILayout.PropertyField(noise.FindPropertyRelative("persistence"));
+                        EditorGUILayout.PropertyField(noise.FindPropertyRelative("lacunarity"));
+                        EditorGUILayout.PropertyField(noise.FindPropertyRelative("offset"));
+                    }
+                }
+            }
+        }
+
+        void DrawErosionSection()
+        {
+            var erosion = serializedObject.FindProperty("erosion");
+            var enabled = erosion.FindPropertyRelative("enabled");
+            var iterations = erosion.FindPropertyRelative("iterations");
+
+            string summary = enabled.boolValue
+                ? $"on · {FormatCount(iterations.intValue)}"
+                : "off";
+
+            if (!InspectorSections.Foldout("erosion", "Erosion", summary, true)) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(enabled, new GUIContent("Enabled"));
+
+                using (new EditorGUI.DisabledScope(!enabled.boolValue))
+                {
+                    EditorGUILayout.PropertyField(iterations, new GUIContent("Strength"));
+
+                    var strengthHint = new GUIStyle(EditorStyles.miniLabel)
+                    {
+                        fontStyle = FontStyle.Italic,
+                        normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
+                    };
+                    var hintRect = EditorGUILayout.GetControlRect(false, 13f);
+                    hintRect.xMin += EditorGUIUtility.labelWidth + 2f;
+                    GUI.Label(hintRect, $"droplets simulated · about {EstimateErosionMs(iterations.intValue)} ms", strengthHint);
+
+                    InspectorSections.SliderWithHint(
+                        erosion.FindPropertyRelative("erosionRadius"), "Valley Width",
+                        "sharp gullies", "broad valleys");
+
+                    EditorGUILayout.PropertyField(
+                        erosion.FindPropertyRelative("sedimentCapacityFactor"), new GUIContent("Carve Depth"));
+
+                    if (InspectorSections.Advanced("erosion", "9 physics dials"))
+                    {
+                        using (new EditorGUI.IndentLevelScope())
+                        {
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("maxDropletLifetime"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("inertia"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("minSedimentCapacity"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("erodeSpeed"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("depositSpeed"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("evaporateSpeed"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("gravity"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("initialSpeed"));
+                            EditorGUILayout.PropertyField(erosion.FindPropertyRelative("initialWater"));
+                        }
+                    }
+                }
+            }
+        }
+
+        void DrawEdgesSection()
+        {
+            var falloffMode = serializedObject.FindProperty("falloffMode");
+            var seaLevel = serializedObject.FindProperty("seaLevel");
+
+            string summary = falloffMode.enumValueIndex == 0
+                ? "no falloff"
+                : falloffMode.enumDisplayNames[falloffMode.enumValueIndex].ToLowerInvariant();
+
+            if (!InspectorSections.Foldout("edges", "Edges & Water", summary)) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(falloffMode, new GUIContent("Edge Shape"));
+
+                using (new EditorGUI.DisabledScope(falloffMode.enumValueIndex == 0))
+                {
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty("falloffStrength"), new GUIContent("Edge Reach"));
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty("falloffSharpness"), new GUIContent("Edge Hardness"));
+                }
+
+                EditorGUILayout.PropertyField(seaLevel, new GUIContent("Sea Level"));
+
+                // Sea Level is the control people most often expect to create water.
+                var worldHeight = serializedObject.FindProperty("worldHeight").floatValue;
+                EditorGUILayout.HelpBox(
+                    $"Shades the preview and gives layer rules a reference. It does not create water — " +
+                    $"put your own water surface at Y = {worldHeight * seaLevel.floatValue:0.#}.",
+                    MessageType.None);
+            }
+        }
+
+        void DrawWorldSection()
+        {
+            var resolution = serializedObject.FindProperty("resolution");
+            var worldSize = serializedObject.FindProperty("worldSize");
+
+            if (!InspectorSections.Foldout("world", "World & Resolution",
+                    $"{worldSize.floatValue:0}m · {_settings.Resolution}")) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("seed"));
+                EditorGUILayout.PropertyField(worldSize, new GUIContent("World Size (m)"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("worldHeight"), new GUIContent("Max Height (m)"));
+                EditorGUILayout.PropertyField(resolution);
+
+                if (_settings.Resolution >= 2049)
+                {
+                    EditorGUILayout.HelpBox(
+                        "2049 is memory-hungry and slow to generate. 513 or 1025 suits most terrain.",
+                        MessageType.Warning);
+                }
+            }
+        }
+
+        void DrawLayersSection()
+        {
+            var layerRules = serializedObject.FindProperty("layerRules");
+            int count = layerRules.arraySize;
+
+            string summary = count == 0 ? "placeholder" : $"{count} rule{(count == 1 ? "" : "s")}";
+
+            if (!InspectorSections.Foldout("layers", "Terrain Layers", summary)) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(layerRules, new GUIContent("Layer Rules"), true);
+
+                if (count == 0)
+                {
+                    EditorGUILayout.HelpBox(
+                        "With no rules the terrain shows a grey checker. Add rules with a TerrainLayer " +
+                        "each to texture it by height and slope.",
+                        MessageType.Info);
+                }
+                else
+                {
+                    DrawLayerBandStrip();
+                }
+            }
+        }
+
+        // --- inline visual feedback ----------------------------------------
+
+        /// <summary>
+        /// Draws the terrain's elevation profile along one line of the current preview,
+        /// coloured by the same palette as the map. The Height Curve is the hardest
+        /// control here to predict from its own graph, because what matters is the shape
+        /// it produces, not the curve itself.
+        /// </summary>
+        void DrawCurveStrip()
+        {
+            if (_heights == null) return;
+
+            var rect = EditorGUILayout.GetControlRect(false, 54f);
+            rect.xMin += EditorGUIUtility.labelWidth + 2f;
+
+            if (Event.current.type != EventType.Repaint) return;
+
+            EditorGUI.DrawRect(rect, new Color(0.13f, 0.19f, 0.24f));
+
+            int res = _heights.GetLength(0);
+            int row = res / 2;
+            float sea = _settings.seaLevel;
+
+            // One vertical bar per pixel column, coloured by elevation: cheap to draw
+            // and it reads as a cross-section without needing a mesh.
+            int columns = Mathf.Min((int)rect.width, res);
+            for (int i = 0; i < columns; i++)
+            {
+                float t = columns > 1 ? (float)i / (columns - 1) : 0f;
+                int sampleX = Mathf.Clamp(Mathf.RoundToInt(t * (res - 1)), 0, res - 1);
+                float h = _heights[row, sampleX];
+
+                float barHeight = Mathf.Max(1f, h * rect.height);
+                var bar = new Rect(
+                    rect.x + i * (rect.width / columns),
+                    rect.yMax - barHeight,
+                    Mathf.Ceil(rect.width / columns),
+                    barHeight);
+
+                EditorGUI.DrawRect(bar, SurfaceColor(h, sea));
+            }
+
+            // Sea level line, so the water threshold is visible against the profile.
+            var seaY = rect.yMax - sea * rect.height;
+            EditorGUI.DrawRect(new Rect(rect.x, seaY, rect.width, 1f), new Color(0.45f, 0.75f, 0.95f, 0.6f));
+
+            var caption = new GUIStyle(EditorStyles.miniLabel)
+            {
+                normal = { textColor = new Color(0.62f, 0.72f, 0.80f) }
+            };
+            GUI.Label(new Rect(rect.x + 3f, rect.yMax - 15f, rect.width, 14f), "cross-section", caption);
+        }
+
+        /// <summary>
+        /// Draws each layer rule as a band over the 0..1 height range, so overlaps and
+        /// gaps in coverage are visible instead of having to be worked out from numbers.
+        /// </summary>
+        void DrawLayerBandStrip()
+        {
+            var rules = _settings.layerRules;
+            if (rules == null || rules.Length == 0) return;
+
+            var rect = EditorGUILayout.GetControlRect(false, 18f + rules.Length * 14f);
+            rect.xMin += EditorGUIUtility.labelWidth + 2f;
+
+            if (Event.current.type != EventType.Repaint) return;
+
+            // Axis strip showing the height range the bands are measured against.
+            var axis = new Rect(rect.x, rect.y, rect.width, 12f);
+            EditorGUI.DrawRect(axis, new Color(0.16f, 0.16f, 0.16f));
+
+            float sea = _settings.seaLevel;
+            EditorGUI.DrawRect(
+                new Rect(axis.x, axis.y, axis.width * sea, axis.height),
+                new Color(0.16f, 0.28f, 0.42f));
+
+            var axisStyle = new GUIStyle(EditorStyles.miniLabel)
+            {
+                normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
+                fontSize = 9
+            };
+            GUI.Label(new Rect(axis.x + 2f, axis.y - 1f, 60f, 12f), "sea", axisStyle);
+            GUI.Label(new Rect(axis.xMax - 26f, axis.y - 1f, 26f, 12f), "peak", axisStyle);
+
+            for (int i = 0; i < rules.Length; i++)
+            {
+                var rule = rules[i];
+                if (rule == null) continue;
+
+                float y = rect.y + 14f + i * 14f;
+                var lane = new Rect(rect.x, y, rect.width, 11f);
+                EditorGUI.DrawRect(lane, new Color(0.19f, 0.19f, 0.19f));
+
+                float min = Mathf.Clamp01(Mathf.Min(rule.heightRange.x, rule.heightRange.y));
+                float max = Mathf.Clamp01(Mathf.Max(rule.heightRange.x, rule.heightRange.y));
+
+                var band = new Rect(
+                    lane.x + min * lane.width,
+                    lane.y,
+                    Mathf.Max(2f, (max - min) * lane.width),
+                    lane.height);
+
+                // Distinct hue per lane: these identify rules, they do not encode height.
+                var hue = Mathf.Repeat(0.33f + i * 0.17f, 1f);
+                EditorGUI.DrawRect(band, Color.HSVToRGB(hue, 0.45f, 0.72f));
+
+                string label = string.IsNullOrEmpty(rule.name) ? $"Layer {i}" : rule.name;
+                if (rule.layer == null) label += "  (no layer)";
+
+                var laneStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    normal = { textColor = new Color(0.9f, 0.9f, 0.9f) },
+                    fontSize = 9
+                };
+                GUI.Label(new Rect(band.x + 3f, band.y - 1f, lane.width, 12f), label, laneStyle);
+            }
+        }
+
+        static string FormatCount(int value)
+        {
+            if (value >= 1000000) return $"{value / 1000000f:0.#}M";
+            if (value >= 1000) return $"{value / 1000f:0.#}k";
+            return value.ToString();
+        }
+
+        /// <summary>
+        /// Rough wall-clock estimate so Strength reads as a time cost, not just a count.
+        /// Calibrated against measured runs: ~50k droplets at 513 took about 365ms.
+        /// </summary>
+        int EstimateErosionMs(int iterations)
+        {
+            float perDroplet = 365f / 50000f;
+            float resolutionFactor = Mathf.Max(1f, _settings.Resolution / 513f);
+            return Mathf.Max(1, Mathf.RoundToInt(iterations * perDroplet * resolutionFactor));
         }
 
         void DrawPreviewSection()

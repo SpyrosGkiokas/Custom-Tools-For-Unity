@@ -28,6 +28,41 @@ The two assembly definitions keep `Editor/` out of your builds automatically.
 3. Click **Create Terrain In Scene**. You now have a `Terrain` GameObject.
 4. Assign a material and layers for texturing — see [URP setup](#urp-setup) next.
 
+### Presets
+
+**Assets > Create > Custom Tools > Terrain Preset Library** creates five starting
+presets — Alpine Ridges, Tropical Island, Desert Canyon, Rolling Plains, Impact Crater.
+Each lands you somewhere recognisable to adjust from rather than dialling 31 controls
+from scratch.
+
+A preset is an ordinary settings asset kept in a folder named `Presets`, so any settings
+asset in such a folder is listed. **Load a preset…** at the top of the Inspector copies
+its values across (undoable), and **Save As…** writes the current values as a new preset.
+Nothing is locked: edit a preset like any other asset.
+
+### Reading the Inspector
+
+Controls are grouped into collapsible sections that remember their state. A collapsed
+section still shows what it is set to on the right — `on · 50k`, `island`, `4 rules` —
+so closing one never hides its state.
+
+Within a section, the dials you reach for daily stay visible and the rest sit behind
+**Advanced**. Erosion has 13 settings but only three matter most of the time, so the other
+nine are one click away instead of in your face.
+
+Two places draw what the numbers mean:
+
+- **Shape** shows a cross-section of the terrain under the Height Curve, coloured by
+  elevation with the sea level marked. The curve's own graph does not tell you much; the
+  resulting profile does.
+- **Terrain Layers** draws each rule as a band across the height range, so overlaps and
+  uncovered gaps are visible rather than deduced from pairs of numbers.
+
+Some Inspector labels read differently from the field names in code, describing the result
+rather than the implementation: **Feature Size** (`scale`), **Detail Levels** (`octaves`),
+**Erosion Strength** (`iterations`), **Valley Width** (`erosionRadius`), **Carve Depth**
+(`sedimentCapacityFactor`), **Edge Shape** (`falloffMode`).
+
 ### The preview
 
 The Inspector preview has two modes, switched with the tabs:
