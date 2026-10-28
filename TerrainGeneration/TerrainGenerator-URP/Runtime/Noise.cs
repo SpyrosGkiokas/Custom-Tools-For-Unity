@@ -25,6 +25,22 @@ namespace CustomTools.TerrainGenerationURP
         /// </summary>
         public static float Sample(float x, float y, NoiseSettings s, Vector2[] octaveOffsets)
         {
+            // Domain warping: displace the sample point with more noise before reading
+            // the terrain. Perlin's gradients sit on an integer lattice, so unwarped
+            // features tend to line up with the axes; bending the coordinate space is
+            // what breaks that signature and makes ridges meander like real ones.
+            if (s.warpStrength > 0f)
+            {
+                // Offsets keep the two warp fields from correlating with each other or
+                // with the terrain, which would shear everything one way instead of
+                // swirling it.
+                float wx = Mathf.PerlinNoise(x * s.warpScale + 13.7f, y * s.warpScale + 71.3f) * 2f - 1f;
+                float wy = Mathf.PerlinNoise(x * s.warpScale + 91.1f, y * s.warpScale + 47.9f) * 2f - 1f;
+
+                x += wx * s.warpStrength;
+                y += wy * s.warpStrength;
+            }
+
             float amplitude = 1f;
             float frequency = 1f;
             float value = 0f;
@@ -101,5 +117,14 @@ namespace CustomTools.TerrainGenerationURP
 
         [Tooltip("Pans the noise field without changing its shape.")]
         public Vector2 offset = Vector2.zero;
+
+        [Tooltip("Domain warp amount. Bends the noise so features meander instead of " +
+                 "lining up with the axes, which is Perlin's most obvious tell. " +
+                 "0.1-0.4 reads as natural; higher smears the terrain.")]
+        [Range(0f, 1f)] public float warpStrength = 0.25f;
+
+        [Tooltip("Size of the warp swirls. Lower values bend large regions; higher " +
+                 "values add wobble to small features.")]
+        [Range(0.1f, 8f)] public float warpScale = 1.5f;
     }
 }

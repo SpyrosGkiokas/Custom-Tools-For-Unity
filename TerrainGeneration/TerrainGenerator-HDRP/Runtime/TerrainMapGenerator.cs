@@ -84,23 +84,68 @@ namespace CustomTools.TerrainGeneration
                 }
             }
 
-            // Pass 3: erosion, last, so it weathers the final shaped surface rather
-            // than detail that falloff or the curve would later flatten away.
+            // Pass 3 onward: the weathering and detail stages, in an order that mirrors
+            // how real terrain forms. Each reads the surface the previous one left, so
+            // reordering them changes the result — water carves the shaped landscape,
+            // gravity then settles what water exposed, and detail goes on last so it is
+            // not smoothed away by the simulations.
             flow = null;
-            if (settings.erosion != null && settings.erosion.enabled && settings.erosion.iterations > 0)
+
+            bool erode = settings.erosion != null && settings.erosion.enabled && settings.erosion.iterations > 0;
+            bool thermal = settings.thermal != null && settings.thermal.enabled && settings.thermal.iterations > 0;
+
+            // Progress is shared across stages so the bar reflects the whole job rather
+            // than restarting per stage.
+            float stages = (erode ? 1f : 0f) + (thermal ? 1f : 0f);
+            float stageIndex = 0f;
+
+            System.Func<float, bool> StageProgress(float index) =>
+                onProgress == null ? (System.Func<float, bool>)null
+                                   : p => onProgress((index + p) / Mathf.Max(1f, stages));
+
+            if (erode)
             {
                 flow = new float[res, res];
-                Erosion.Apply(heights, settings.erosion, settings.seed, flow, onProgress);
+                Erosion.Apply(heights, settings.erosion, settings.seed, flow, StageProgress(stageIndex));
+                stageIndex++;
 
                 // Deposited sediment can mound a cell above 1.0, which TerrainData
                 // rejects. Clamp rather than renormalize: rescaling the whole map
                 // would undo the erosion's carefully carved relative depths.
-                for (int y = 0; y < res; y++)
-                    for (int x = 0; x < res; x++)
-                        heights[y, x] = Mathf.Clamp01(heights[y, x]);
+                ClampAll(heights, res);
             }
 
+            if (thermal)
+            {
+                // After hydraulic erosion, not before: water exposes the steep faces
+                // that then shed debris, and running it first would smooth away the
+                // slopes water needs in order to cut channels at all.
+                ThermalErosion.Apply(
+                    heights, settings.thermal, settings.worldSize, settings.worldHeight,
+                    StageProgress(stageIndex));
+                stageIndex++;
+            }
+
+            // Rivers before detail: the channel is terrain shape, and the detail pass
+            // reads the flow map to keep river beds smooth, so it needs the channel to
+            // already be cut.
+            TerrainDetail.ApplyRiverChannels(heights, flow, settings.rivers);
+
+            TerrainDetail.ApplyStrata(heights, settings.strata);
+
+            // Detail last, so neither simulation smooths it away.
+            TerrainDetail.ApplyContextDetail(
+                heights, flow, settings.detail, settings.seed,
+                settings.worldSize, settings.worldHeight);
+
             return heights;
+        }
+
+        static void ClampAll(float[,] heights, int res)
+        {
+            for (int y = 0; y < res; y++)
+                for (int x = 0; x < res; x++)
+                    heights[y, x] = Mathf.Clamp01(heights[y, x]);
         }
 
         /// <summary>

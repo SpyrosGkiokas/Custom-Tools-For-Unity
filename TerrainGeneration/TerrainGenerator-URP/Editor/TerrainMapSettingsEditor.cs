@@ -144,9 +144,122 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
         {
             DrawShapeSection();
             DrawErosionSection();
+            DrawThermalSection();
+            DrawDetailSection();
             DrawEdgesSection();
             DrawWorldSection();
             DrawLayersSection();
+        }
+
+        void DrawThermalSection()
+        {
+            var thermal = serializedObject.FindProperty("thermal");
+            var enabled = thermal.FindPropertyRelative("enabled");
+            var iterations = thermal.FindPropertyRelative("iterations");
+            var angle = thermal.FindPropertyRelative("talusAngle");
+
+            string summary = enabled.boolValue ? $"on · {angle.floatValue:0}°" : "off";
+
+            if (!InspectorSections.Foldout("thermal", "Thermal Erosion (Talus)", summary)) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(enabled, new GUIContent("Enabled"));
+
+                using (new EditorGUI.DisabledScope(!enabled.boolValue))
+                {
+                    EditorGUILayout.PropertyField(iterations, new GUIContent("Sweeps"));
+
+                    InspectorSections.SliderWithHint(
+                        angle, "Slope Target",
+                        "rounded hills", "sheer cliffs");
+
+                    EditorGUILayout.PropertyField(thermal.FindPropertyRelative("rate"), new GUIContent("Settle Rate"));
+
+                    EditorGUILayout.HelpBox(
+                        "Slopes approach the target angle gradually rather than being clamped to it, " +
+                        "so the steepest ground stays above it unless Sweeps is high. 40 softens " +
+                        "cliffs noticeably; 100+ settles the terrain properly.",
+                        MessageType.None);
+                }
+            }
+        }
+
+        void DrawDetailSection()
+        {
+            var detail = serializedObject.FindProperty("detail");
+            var rivers = serializedObject.FindProperty("rivers");
+            var strata = serializedObject.FindProperty("strata");
+
+            var parts = new System.Collections.Generic.List<string>();
+            if (detail.FindPropertyRelative("enabled").boolValue) parts.Add("detail");
+            if (rivers.FindPropertyRelative("enabled").boolValue) parts.Add("rivers");
+            if (strata.FindPropertyRelative("enabled").boolValue) parts.Add("strata");
+            string summary = parts.Count == 0 ? "off" : string.Join(" · ", parts);
+
+            if (!InspectorSections.Foldout("detail", "Detail & Rivers", summary)) return;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                // --- micro-relief
+                var detailEnabled = detail.FindPropertyRelative("enabled");
+                EditorGUILayout.LabelField("Micro-relief", EditorStyles.miniBoldLabel);
+                EditorGUILayout.PropertyField(detailEnabled, new GUIContent("Enabled"));
+
+                using (new EditorGUI.DisabledScope(!detailEnabled.boolValue))
+                {
+                    EditorGUILayout.PropertyField(detail.FindPropertyRelative("amplitude"), new GUIContent("Amount"));
+                    EditorGUILayout.PropertyField(detail.FindPropertyRelative("detailScale"), new GUIContent("Grain Size"));
+
+                    InspectorSections.SliderWithHint(
+                        detail.FindPropertyRelative("flatRoughness"), "Flat Roughness",
+                        "smooth flats", "uniform detail");
+
+                    EditorGUILayout.PropertyField(detail.FindPropertyRelative("wetSmoothing"), new GUIContent("Water Smoothing"));
+                    EditorGUILayout.PropertyField(detail.FindPropertyRelative("steepAngle"), new GUIContent("Steep Angle"));
+                }
+
+                EditorGUILayout.Space(4f);
+
+                // --- rivers
+                var riversEnabled = rivers.FindPropertyRelative("enabled");
+                EditorGUILayout.LabelField("River Channels", EditorStyles.miniBoldLabel);
+                EditorGUILayout.PropertyField(riversEnabled, new GUIContent("Enabled"));
+
+                using (new EditorGUI.DisabledScope(!riversEnabled.boolValue))
+                {
+                    EditorGUILayout.PropertyField(rivers.FindPropertyRelative("depth"), new GUIContent("Depth"));
+                    EditorGUILayout.PropertyField(rivers.FindPropertyRelative("width"), new GUIContent("Width"));
+
+                    InspectorSections.SliderWithHint(
+                        rivers.FindPropertyRelative("threshold"), "Min Flow",
+                        "every trickle", "main rivers only");
+                }
+
+                var erosionOn = serializedObject.FindProperty("erosion").FindPropertyRelative("enabled");
+                if (riversEnabled.boolValue && !erosionOn.boolValue)
+                {
+                    // River carving reads the flow map, which only erosion produces.
+                    EditorGUILayout.HelpBox(
+                        "River channels need Erosion enabled — the water flow they follow comes from it. " +
+                        "With erosion off this stage does nothing.",
+                        MessageType.Warning);
+                }
+
+                EditorGUILayout.Space(4f);
+
+                // --- strata
+                var strataEnabled = strata.FindPropertyRelative("enabled");
+                EditorGUILayout.LabelField("Strata", EditorStyles.miniBoldLabel);
+                EditorGUILayout.PropertyField(strataEnabled, new GUIContent("Enabled"));
+
+                using (new EditorGUI.DisabledScope(!strataEnabled.boolValue))
+                {
+                    EditorGUILayout.PropertyField(strata.FindPropertyRelative("strength"), new GUIContent("Strength"));
+                    EditorGUILayout.PropertyField(strata.FindPropertyRelative("bands"), new GUIContent("Layers"));
+                    EditorGUILayout.PropertyField(strata.FindPropertyRelative("sharpness"), new GUIContent("Edge Hardness"));
+                }
+            }
         }
 
         void DrawShapeSection()
@@ -167,6 +280,13 @@ namespace CustomTools.TerrainGenerationURP.EditorTools
 
                 EditorGUILayout.PropertyField(
                     noise.FindPropertyRelative("octaves"), new GUIContent("Detail Levels"));
+
+                InspectorSections.SliderWithHint(
+                    noise.FindPropertyRelative("warpStrength"), "Warp",
+                    "axis-aligned", "meandering");
+
+                EditorGUILayout.PropertyField(
+                    noise.FindPropertyRelative("warpScale"), new GUIContent("Warp Size"));
 
                 EditorGUILayout.PropertyField(
                     serializedObject.FindProperty("heightCurve"), new GUIContent("Height Curve"));

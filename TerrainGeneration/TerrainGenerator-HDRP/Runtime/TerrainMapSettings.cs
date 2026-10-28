@@ -57,6 +57,21 @@ namespace CustomTools.TerrainGeneration
                  "which is what makes terrain read as weathered rather than as noise.")]
         public ErosionSettings erosion = new ErosionSettings();
 
+        [Tooltip("Thermal erosion. Relaxes slopes to an angle rock can actually hold " +
+                 "and piles debris at the base of cliffs.")]
+        public ThermalSettings thermal = new ThermalSettings();
+
+        [Header("Detail")]
+        [Tooltip("Micro-relief that varies by slope and wetness instead of being " +
+                 "uniform, which is the usual giveaway of generated terrain.")]
+        public DetailSettings detail = new DetailSettings();
+
+        [Tooltip("Carves river channels along the water flow erosion produced.")]
+        public RiverSettings rivers = new RiverSettings();
+
+        [Tooltip("Sedimentary banding. A stylistic pass rather than a realism one.")]
+        public StrataSettings strata = new StrataSettings();
+
         [Header("Edges")]
         public FalloffMode falloffMode = FalloffMode.None;
 

@@ -28,6 +28,53 @@ The two assembly definitions keep `Editor/` out of your builds automatically.
 3. Click **Create Terrain In Scene**. You now have a `Terrain` GameObject.
 4. Assign a material and layers for texturing — see [HDRP setup](#hdrp-setup) next.
 
+### The realism stages
+
+Generation runs as a pipeline, each stage reading what the last one left. The order
+mirrors how terrain actually forms, so changing it changes the result.
+
+**1. Domain warping** (Shape > Warp). Bends the noise coordinates with more noise before
+sampling. Perlin's gradients sit on an integer lattice, so unwarped features line up
+subtly with the axes — this is that tell removed, and it costs nothing. 0.1–0.4 reads as
+natural; higher smears the terrain.
+
+**2. Hydraulic erosion.** Water carves drainage networks. Covered above.
+
+**3. Thermal erosion** (Talus). Relaxes slopes toward an angle the material could
+actually hold, piling debris at the base of cliffs. Noise produces slopes steeper than any
+real mountainside, and hydraulic erosion cannot fix them because it only moves material
+where water runs.
+
+Slopes *approach* the target angle rather than being clamped to it, so the steepest ground
+stays above it unless **Sweeps** is high: 40 softens cliffs noticeably, 100+ settles the
+terrain properly. Runs after hydraulic erosion, not before — water exposes the steep faces
+that then shed debris.
+
+**4. River channels.** Hydraulic erosion scours grooves but does not cut the
+flat-bottomed, banked profile that reads as a river, because a droplet's path is narrower
+than the channel it would cut over geological time. This widens the flow map and carves a
+proper channel. **Needs erosion enabled**, since the flow comes from it.
+
+**5. Strata.** Quantizes height into sedimentary bands. Striking in canyons; a stylistic
+choice rather than a realism fix.
+
+**6. Micro-relief** (Detail > Micro-relief). Fine detail whose amplitude varies with slope
+and wetness: rough on exposed rock, smooth on sediment flats and river beds. Uniform
+detail is the giveaway of generated terrain, so this is about *where* detail sits rather
+than how much there is — which is why adding noise octaves does not achieve the same
+thing. Runs last so neither simulation smooths it away.
+
+**Cost.** Measured with erosion at 50k droplets and thermal at its default 40 sweeps:
+
+| Resolution | Full pipeline |
+|---|---|
+| 257 | ~0.5 s |
+| 513 | ~1.5 s |
+| 1025 | ~6 s |
+
+Thermal is the expensive stage, roughly 3× hydraulic erosion at the same resolution.
+A cancellable progress bar covers the whole job.
+
 ### Presets
 
 **Assets > Create > Custom Tools > Terrain Preset Library** creates five starting
@@ -270,8 +317,11 @@ inspect is what you get.
   the placeholder — assign a `TerrainLayer` to every rule to texture it.
 - **Terrain magenta?** A material using a Built-in pipeline shader is assigned. Clear
   **Terrain Material** to let the builder generate the right one.
-- **Terrain looks like noise, not landscape?** Turn on **Erosion**. Nothing else
-  comes close for realism.
+- **Terrain looks like noise, not landscape?** Turn on **Erosion** first, then
+  **Thermal Erosion**. Those two do most of the work.
+- **Ridges look subtly grid-aligned?** Raise **Warp** in Shape to about 0.3.
+- **Terrain reads as too clean or sharp?** Raise thermal **Sweeps**, and enable
+  **Micro-relief** for roughness that varies by slope instead of being uniform.
 - **Erosion too aggressive?** Lower Sediment Capacity Factor, or drop Iterations.
 - **Terrain too noisy?** Lower Scale first, then drop Persistence.
 - **Too flat or samey?** Raise World Height. Check Normalize Heights is on.
