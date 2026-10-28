@@ -42,3 +42,9 @@ NOTES.md
 notes/
 *.local.md
 TODO.local
+
+# Source recordings. These are tens of MB each and are hosted on GitHub's CDN
+# rather than committed: anything over 10 MB will not render in a README, and a
+# blob this size stays in clone history forever.
+Gifs/
+*.gif
