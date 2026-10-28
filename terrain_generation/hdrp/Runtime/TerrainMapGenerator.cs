@@ -24,6 +24,10 @@ namespace CustomTools.TerrainGeneration
             // bake it to a lookup table once instead of calling it res*res times.
             var curveLut = BakeCurve(settings.heightCurve, 512);
 
+            // Pass 1: raw noise. Track the extremes in case we normalize.
+            float min = float.MaxValue;
+            float max = float.MinValue;
+
             for (int y = 0; y < res; y++)
             {
                 float ny = (float)y / (res - 1);
@@ -32,6 +36,27 @@ namespace CustomTools.TerrainGeneration
                     float nx = (float)x / (res - 1);
 
                     float h = Noise.Sample(nx, ny, settings.noise, offsets);
+                    heights[y, x] = h;
+
+                    if (h < min) min = h;
+                    if (h > max) max = h;
+                }
+            }
+
+            // Pass 2: stretch, shape the edges, then remap through the curve.
+            // Normalizing first means the curve always works across the full 0..1 range.
+            bool stretch = settings.normalizeHeights && max - min > 0.0001f;
+
+            for (int y = 0; y < res; y++)
+            {
+                float ny = (float)y / (res - 1);
+                for (int x = 0; x < res; x++)
+                {
+                    float nx = (float)x / (res - 1);
+
+                    float h = heights[y, x];
+                    if (stretch) h = (h - min) / (max - min);
+
                     h = ApplyFalloff(h, nx, ny, settings);
                     h = SampleLut(curveLut, Mathf.Clamp01(h));
 

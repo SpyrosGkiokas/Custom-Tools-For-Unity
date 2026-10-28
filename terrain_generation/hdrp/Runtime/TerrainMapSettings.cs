@@ -45,6 +45,13 @@ namespace CustomTools.TerrainGeneration
                  "X = noise 0..1, Y = height 0..1. Flatten the left side for plains and lakes.")]
         public AnimationCurve heightCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
 
+        [Tooltip("Stretches the generated heights to use the full 0..1 range. " +
+                 "Layered noise naturally clusters around the middle, which reads as " +
+                 "gentle swells; this restores dramatic relief. Note that it makes the " +
+                 "result depend on the map's own extremes, so neighbouring tiles " +
+                 "generated separately will not line up.")]
+        public bool normalizeHeights = true;
+
         [Header("Edges")]
         public FalloffMode falloffMode = FalloffMode.None;
 
