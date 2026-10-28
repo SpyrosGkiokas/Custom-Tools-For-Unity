@@ -25,6 +25,18 @@ for per-run maps.
 - Seeded and deterministic — share a seed to share the exact map
 - Live Inspector preview — a shaded 2D map, or an orbitable 3D mesh, refreshing as you tune
 
+<p align="center">
+  <img width="420" alt="Orbiting the 3D terrain preview in the Unity Inspector"
+       src="https://github.com/user-attachments/assets/6a7f27ab-ec4d-49c8-a430-e071f60a8308" />
+  <img width="420" alt="Tuning sea level with the preview updating live"
+       src="https://github.com/user-attachments/assets/f1dfede2-2f14-49a1-bb59-5b489cb7a102" />
+</p>
+
+<p align="center">
+  <em>Left: the 3D preview, orbited with the mouse. Right: dragging a slider re-runs the
+  pipeline and redraws the preview, so terrain is dialled in without touching the scene.</em>
+</p>
+
 → **[HDRP version](TerrainGeneration/TerrainGenerator-HDRP/)** · **[URP version](TerrainGeneration/TerrainGenerator-URP/)**
 
 ---
