@@ -36,3 +36,9 @@ Thumbs.db
 # Crash reports
 sysinfo.txt
 crashlytics-build.properties
+
+# Personal notes and scratch work — local only, never published.
+NOTES.md
+notes/
+*.local.md
+TODO.local
