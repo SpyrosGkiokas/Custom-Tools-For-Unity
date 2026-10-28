@@ -20,7 +20,7 @@ for per-run maps.
 - Island, radial and basin edge falloff for maps that end in water or a crater rim
 - Automatic texturing by height **and slope**, so cliffs get rock and peaks get snow
 - Seeded and deterministic — share a seed to share the exact map
-- Live preview with hillshading that refreshes as you tune
+- Live Inspector preview — a shaded 2D map, or an orbitable 3D mesh, refreshing as you tune
 
 → **[HDRP version](TerrainGeneration/TerrainGenerator-HDRP/)** · **[URP version](TerrainGeneration/TerrainGenerator-URP/)**
 

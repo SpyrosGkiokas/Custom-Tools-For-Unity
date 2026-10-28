@@ -23,9 +23,27 @@ The two assembly definitions keep `Editor/` out of your builds automatically.
 1. **Assets > Create > Custom Tools > Terrain Map Settings** — this asset is one terrain
    recipe. Duplicate it later to keep presets (Island, Mountains, Plains…).
 2. Select the asset. The Inspector shows a **live preview** that refreshes as you drag
-   sliders. Hit **New Seed** until you see a shape you like.
+   sliders — switch between the **2D Map** and an orbitable **3D Mesh** with the tabs,
+   and hit **New Seed** until you see a shape you like.
 3. Click **Create Terrain In Scene**. You now have a `Terrain` GameObject.
 4. Assign a material and layers for texturing — see [HDRP setup](#hdrp-setup) next.
+
+### The preview
+
+The Inspector preview has two modes, switched with the tabs:
+
+- **2D Map** — top-down colored elevation map with hillshading. Fastest, and the easiest
+  way to read the overall layout of landmasses and water.
+- **3D Mesh** — the same heightmap as a shaded, lit mesh. **Drag to orbit, scroll to
+  zoom.** Best for judging how dramatic the relief actually is, which a top-down map
+  understates.
+
+**Resolution** controls preview detail only — it never affects the terrain you generate.
+513 is a good default; 1025 is sharper but rebuilds slowly enough to feel laggy while
+dragging a slider, so the Inspector warns you there. The 3D mesh caps out at 513 for
+responsiveness even when the 2D map is set higher.
+
+Your mode and resolution choices persist across sessions.
 
 ### HDRP setup
 
@@ -189,9 +207,9 @@ inspect is what you get.
 - **Want mountain ranges, not lumps?** `Ridged` noise, Scale around 1.5–2.5.
 - **Want plains with occasional hills?** `FBM` with a Height Curve that stays flat across
   the left two-thirds, then rises steeply.
-- **Preview feels slow?** Turn off **Auto refresh** and use the **Refresh** button. The
-  preview always renders at 257px regardless of your resolution setting, so the real
-  terrain carries more detail than you see.
+- **Preview feels slow?** Drop the preview **Resolution** to 257, or turn off
+  **Auto refresh** and use the **Refresh** button. Preview resolution is independent of
+  the terrain's own Resolution setting, so this costs you nothing in the built terrain.
 
 ## Caveats
 
