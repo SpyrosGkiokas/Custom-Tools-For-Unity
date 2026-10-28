@@ -17,7 +17,8 @@ namespace CustomTools.TerrainGeneration
         [Tooltip("Terrain to write into. Left empty, one is created as a child on first build.")]
         public Terrain targetTerrain;
 
-        [Tooltip("Material for the terrain. Use an HDRP/TerrainLit material.")]
+        [Tooltip("Material for the terrain. Leave empty to generate an HDRP/TerrainLit " +
+                 "material automatically; assign your own to control its settings.")]
         public Material terrainMaterial;
 
         [Header("Runtime")]
@@ -68,7 +69,7 @@ namespace CustomTools.TerrainGeneration
             ApplyLayers(data, heights);
 
             terrain.heightmapPixelError = pixelError;
-            if (terrainMaterial != null) terrain.materialTemplate = terrainMaterial;
+            ApplyMaterial(terrain);
 
             terrain.Flush();
         }
@@ -137,7 +138,14 @@ namespace CustomTools.TerrainGeneration
         void ApplyLayers(TerrainData data, float[,] heights)
         {
             var rules = settings.layerRules;
-            if (rules == null || rules.Length == 0) return;
+
+            // A Terrain with no layers at all renders as nothing, not even a default
+            // grey, which reads as "the tool is broken". Give it something visible.
+            if (rules == null || rules.Length == 0)
+            {
+                data.terrainLayers = new[] { GetPlaceholderLayer() };
+                return;
+            }
 
             // A null layer would offset every later index, mispainting the whole terrain.
             var layers = new System.Collections.Generic.List<TerrainLayer>(rules.Length);
@@ -150,7 +158,10 @@ namespace CustomTools.TerrainGeneration
             {
                 Debug.LogWarning(
                     $"{nameof(TerrainMapBuilder)} on '{name}': {rules.Length - layers.Count} layer rule(s) " +
-                    "have no TerrainLayer assigned, so texturing was skipped.", this);
+                    "have no TerrainLayer assigned, so the terrain is showing a placeholder " +
+                    "texture instead. Assign a TerrainLayer to every rule to texture it properly.",
+                    this);
+                data.terrainLayers = new[] { GetPlaceholderLayer() };
                 return;
             }
 
@@ -162,5 +173,86 @@ namespace CustomTools.TerrainGeneration
             var splat = TerrainMapGenerator.GenerateSplatmap(settings, heights, alphaRes);
             if (splat != null) data.SetAlphamaps(0, 0, splat);
         }
+
+        /// <summary>
+        /// Assigns the terrain material. Falls back to building an HDRP/TerrainLit
+        /// material in code, since a terrain with no suitable material renders magenta.
+        /// </summary>
+        void ApplyMaterial(Terrain terrain)
+        {
+            if (terrainMaterial != null)
+            {
+                terrain.materialTemplate = terrainMaterial;
+                return;
+            }
+
+            // Unity's default terrain material is built for the Built-in pipeline,
+            // so under HDRP it renders magenta until a TerrainLit material is set.
+            if (_fallbackMaterial == null)
+            {
+                var shader = Shader.Find("HDRP/TerrainLit");
+                if (shader == null)
+                {
+                    Debug.LogWarning(
+                        $"{nameof(TerrainMapBuilder)} on '{name}': could not find the " +
+                        "'HDRP/TerrainLit' shader, so the terrain may render magenta. " +
+                        "Create a material using that shader and assign it to Terrain Material.",
+                        this);
+                    return;
+                }
+
+                _fallbackMaterial = new Material(shader) { name = "Terrain Material (generated)" };
+            }
+
+            terrain.materialTemplate = _fallbackMaterial;
+        }
+
+        /// <summary>
+        /// A built-in checkered layer used when no usable rules exist, so the terrain is
+        /// always visible. Deliberately obvious: it reads as a placeholder rather than
+        /// looking like an intended material, and the grid shows shape and scale.
+        /// </summary>
+        TerrainLayer GetPlaceholderLayer()
+        {
+            if (_placeholderLayer != null) return _placeholderLayer;
+
+            const int size = 128;
+            const int checkerSize = 16;
+
+            var tex = new Texture2D(size, size)
+            {
+                name = "Placeholder Terrain Texture",
+                wrapMode = TextureWrapMode.Repeat
+            };
+
+            var light = new Color(0.62f, 0.64f, 0.60f);
+            var dark = new Color(0.48f, 0.50f, 0.47f);
+
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    bool even = ((x / checkerSize) + (y / checkerSize)) % 2 == 0;
+                    pixels[y * size + x] = even ? light : dark;
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            _placeholderLayer = new TerrainLayer
+            {
+                name = "Placeholder Layer",
+                diffuseTexture = tex,
+                tileSize = new Vector2(16f, 16f)
+            };
+
+            return _placeholderLayer;
+        }
+
+        // Cached so repeated Build() calls don't leak a texture or material each time.
+        TerrainLayer _placeholderLayer;
+        Material _fallbackMaterial;
     }
 }

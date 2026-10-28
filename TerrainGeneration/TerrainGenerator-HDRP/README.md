@@ -29,16 +29,21 @@ The two assembly definitions keep `Editor/` out of your builds automatically.
 
 ### HDRP setup
 
-Two things are easy to miss:
+Generating with no setup at all gives you a **grey checkered terrain**. That is the
+built-in placeholder, telling you the shape is working and only the texturing is missing.
+To replace it:
 
-**The material.** HDRP terrain needs an `HDRP/TerrainLit` shader or it renders magenta.
-Create a material (**Assets > Create > Material**), set its shader to **HDRP/TerrainLit**,
-then assign it to **Terrain Material** on the builder component.
+**The material.** Leave **Terrain Material** empty and the builder creates an
+`HDRP/TerrainLit` material for you. Assign your own only when you want control over its
+settings — create a material (**Assets > Create > Material**) and set its shader to
+**HDRP/TerrainLit**. Unity's default terrain material is built for the Built-in pipeline
+and renders magenta under HDRP, so never assign that one.
 
 **The layers.** Each layer rule needs a `TerrainLayer` asset
-(**Assets > Create > Terrain Layer**) with at least a Diffuse texture. Rules with no layer
-assigned are skipped with a console warning rather than mispainting the terrain, so
-texturing is all-or-nothing — assign every one.
+(**Assets > Create > Terrain Layer**) with at least a Diffuse texture. With no rules, or
+with any rule missing its layer, you get the placeholder checker instead — texturing is
+all-or-nothing, so assign a layer to every rule. See
+[Layer rules](#layer-rules) for a starting set.
 
 ### Save your terrain before recompiling
 
@@ -89,8 +94,12 @@ Use it once you're happy with a map. Terrain you generate at runtime doesn't nee
 ### Water
 
 **Sea Level** is the normalized height treated as water. It drives the preview colors and
-gives your layer rules a reference point — it does not create a water plane. Add your own
-mesh or HDRP water surface at `worldHeight * seaLevel`.
+gives your layer rules a reference point.
+
+**It does not create any water in your scene.** The blue you see in the Inspector preview
+is just the preview shading everything below this height. To get actual water, add your
+own HDRP water surface at a Y position of `worldHeight * seaLevel` — with the defaults
+(`worldHeight` 300, `seaLevel` 0.3) that is Y = 90.
 
 ### Layer rules
 
@@ -171,6 +180,10 @@ inspect is what you get.
 
 ## Tuning tips
 
+- **Terrain invisible, or grey and checkered?** No usable layer rules. That checker is
+  the placeholder — assign a `TerrainLayer` to every rule to texture it.
+- **Terrain magenta?** A material using a Built-in pipeline shader is assigned. Clear
+  **Terrain Material** to let the builder generate the right one.
 - **Terrain too noisy?** Lower Scale first, then drop Persistence.
 - **Too flat or samey?** Raise World Height. Check Normalize Heights is on.
 - **Want mountain ranges, not lumps?** `Ridged` noise, Scale around 1.5–2.5.
