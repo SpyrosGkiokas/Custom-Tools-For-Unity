@@ -1,0 +1,38 @@
+# This repo holds loose tool folders meant to be copied into a Unity project.
+# These entries matter if you open it as a Unity project, or drop one in here.
+
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Uu]ser[Ss]ettings/
+
+# Never commit these: Unity regenerates them per machine.
+/[Aa]ssets/AssetStoreTools*
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS and editor cruft
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+.idea/
+
+# Crash reports
+sysinfo.txt
+crashlytics-build.properties
