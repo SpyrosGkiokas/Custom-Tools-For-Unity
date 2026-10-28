@@ -39,10 +39,57 @@ namespace CustomTools.TerrainGeneration.EditorTools
         /// </summary>
         const int HeavyPreviewResolution = 1025;
 
-        /// <summary>A 3D preview mesh is capped here: 513² is already 263k verts.</summary>
-        const int MaxMeshResolution = 513;
+        /// <summary>
+        /// Mesh density cap for the 3D preview. The panel is roughly 500x320 px, so a
+        /// 257² mesh already puts more than one vertex per pixel: 513² would be 263k
+        /// vertices and 524k triangles of detail the panel cannot resolve, rebuilt every
+        /// time a setting changes. The 2D map still shows the full preview resolution.
+        /// </summary>
+        const int MaxMeshResolution = 257;
 
         int _previewResolution = 513;
+
+        // Mesh buffers, reused across rebuilds rather than reallocated.
+        Vector3[] _meshVertices;
+        Vector2[] _meshUvs;
+        Color[] _meshColors;
+        int[] _meshTriangles;
+        int _meshTriangleRes = -1;
+
+        // Cached preset list: scanning the AssetDatabase is far too slow to do per frame.
+        System.Collections.Generic.List<TerrainMapSettings> _presets;
+        double _presetsCachedAt = -999d;
+        const double PresetCacheSeconds = 2d;
+
+        static readonly System.Collections.Generic.List<TerrainMapSettings> EmptyPresets =
+            new System.Collections.Generic.List<TerrainMapSettings>();
+
+        // Styles built once on demand. Allocating a GUIStyle per repaint churns the GC
+        // while orbiting, and EditorStyles is not available during static init.
+        static GUIStyle _hintStyle, _captionStyle, _axisStyle, _laneStyle;
+
+        static GUIStyle HintStyle => _hintStyle ??= new GUIStyle(EditorStyles.miniLabel)
+        {
+            fontStyle = FontStyle.Italic,
+            normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
+        };
+
+        static GUIStyle CaptionStyle => _captionStyle ??= new GUIStyle(EditorStyles.miniLabel)
+        {
+            normal = { textColor = new Color(0.62f, 0.72f, 0.80f) }
+        };
+
+        static GUIStyle AxisStyle => _axisStyle ??= new GUIStyle(EditorStyles.miniLabel)
+        {
+            normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
+            fontSize = 9
+        };
+
+        static GUIStyle LaneStyle => _laneStyle ??= new GUIStyle(EditorStyles.miniLabel)
+        {
+            normal = { textColor = new Color(0.9f, 0.9f, 0.9f) },
+            fontSize = 9
+        };
 
         void OnEnable()
         {
@@ -100,7 +147,17 @@ namespace CustomTools.TerrainGeneration.EditorTools
 
         void DrawPresetBar()
         {
-            var presets = TerrainPresets.FindAll();
+            // FindAll scans the whole AssetDatabase, so it must not run per repaint:
+            // orbiting the 3D preview repaints continuously. Refreshed on Layout only,
+            // and at most a few times a second.
+            if (Event.current.type == EventType.Layout &&
+                EditorApplication.timeSinceStartup - _presetsCachedAt > PresetCacheSeconds)
+            {
+                _presets = TerrainPresets.FindAll();
+                _presetsCachedAt = EditorApplication.timeSinceStartup;
+            }
+
+            var presets = _presets ?? EmptyPresets;
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -328,14 +385,9 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 {
                     EditorGUILayout.PropertyField(iterations, new GUIContent("Strength"));
 
-                    var strengthHint = new GUIStyle(EditorStyles.miniLabel)
-                    {
-                        fontStyle = FontStyle.Italic,
-                        normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
-                    };
                     var hintRect = EditorGUILayout.GetControlRect(false, 13f);
                     hintRect.xMin += EditorGUIUtility.labelWidth + 2f;
-                    GUI.Label(hintRect, $"droplets simulated · about {EstimateErosionMs(iterations.intValue)} ms", strengthHint);
+                    GUI.Label(hintRect, $"droplets simulated · about {EstimateErosionMs(iterations.intValue)} ms", HintStyle);
 
                     InspectorSections.SliderWithHint(
                         erosion.FindPropertyRelative("erosionRadius"), "Valley Width",
@@ -492,11 +544,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
             var seaY = rect.yMax - sea * rect.height;
             EditorGUI.DrawRect(new Rect(rect.x, seaY, rect.width, 1f), new Color(0.45f, 0.75f, 0.95f, 0.6f));
 
-            var caption = new GUIStyle(EditorStyles.miniLabel)
-            {
-                normal = { textColor = new Color(0.62f, 0.72f, 0.80f) }
-            };
-            GUI.Label(new Rect(rect.x + 3f, rect.yMax - 15f, rect.width, 14f), "cross-section", caption);
+            GUI.Label(new Rect(rect.x + 3f, rect.yMax - 15f, rect.width, 14f), "cross-section", CaptionStyle);
         }
 
         /// <summary>
@@ -522,13 +570,8 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 new Rect(axis.x, axis.y, axis.width * sea, axis.height),
                 new Color(0.16f, 0.28f, 0.42f));
 
-            var axisStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
-                fontSize = 9
-            };
-            GUI.Label(new Rect(axis.x + 2f, axis.y - 1f, 60f, 12f), "sea", axisStyle);
-            GUI.Label(new Rect(axis.xMax - 26f, axis.y - 1f, 26f, 12f), "peak", axisStyle);
+            GUI.Label(new Rect(axis.x + 2f, axis.y - 1f, 60f, 12f), "sea", AxisStyle);
+            GUI.Label(new Rect(axis.xMax - 26f, axis.y - 1f, 26f, 12f), "peak", AxisStyle);
 
             for (int i = 0; i < rules.Length; i++)
             {
@@ -555,12 +598,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 string label = string.IsNullOrEmpty(rule.name) ? $"Layer {i}" : rule.name;
                 if (rule.layer == null) label += "  (no layer)";
 
-                var laneStyle = new GUIStyle(EditorStyles.miniLabel)
-                {
-                    normal = { textColor = new Color(0.9f, 0.9f, 0.9f) },
-                    fontSize = 9
-                };
-                GUI.Label(new Rect(band.x + 3f, band.y - 1f, lane.width, 12f), label, laneStyle);
+                GUI.Label(new Rect(band.x + 3f, band.y - 1f, lane.width, 12f), label, LaneStyle);
             }
         }
 
@@ -588,7 +626,12 @@ namespace CustomTools.TerrainGeneration.EditorTools
 
             DrawPreviewToolbar();
 
-            if (_dirty && (_autoRefresh || _heights == null))
+            // Only regenerate on a Layout event. Orbiting the 3D view calls Repaint
+            // continuously, and generation now runs a multi-stage pipeline, so
+            // rebuilding per repaint would re-run seconds of simulation mid-drag.
+            bool mayRebuild = Event.current.type == EventType.Layout;
+
+            if (_dirty && mayRebuild && (_autoRefresh || _heights == null))
                 RebuildPreview();
 
             if (_mode == PreviewMode.Map2D) DrawMapPreview();
@@ -805,9 +848,18 @@ namespace CustomTools.TerrainGeneration.EditorTools
             int step = Mathf.Max(1, Mathf.CeilToInt((float)source / MaxMeshResolution));
             int res = (source - 1) / step + 1;
 
-            var vertices = new Vector3[res * res];
-            var uvs = new Vector2[res * res];
-            var colors = new Color[res * res];
+            // Buffers are reused across rebuilds: at the cap this is ~100k vertices,
+            // and reallocating them on every settings change churns the GC.
+            if (_meshVertices == null || _meshVertices.Length != res * res)
+            {
+                _meshVertices = new Vector3[res * res];
+                _meshUvs = new Vector2[res * res];
+                _meshColors = new Color[res * res];
+            }
+
+            var vertices = _meshVertices;
+            var uvs = _meshUvs;
+            var colors = _meshColors;
 
             // Vertical exaggeration relative to the footprint, so the mesh reads the
             // way the real terrain will instead of looking flat at 1000m across.
@@ -832,43 +884,64 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 }
             }
 
-            var triangles = new int[(res - 1) * (res - 1) * 6];
-            int t = 0;
-            for (int y = 0; y < res - 1; y++)
+            // The index pattern depends only on the grid size, so it survives every
+            // rebuild at the same resolution — which is the common case, since changing
+            // a noise or erosion setting does not change the mesh dimensions.
+            bool indicesStale = _meshTriangles == null || _meshTriangleRes != res;
+            if (indicesStale)
             {
-                for (int x = 0; x < res - 1; x++)
-                {
-                    int i = y * res + x;
-                    triangles[t++] = i;
-                    triangles[t++] = i + res;
-                    triangles[t++] = i + 1;
+                _meshTriangles = new int[(res - 1) * (res - 1) * 6];
+                _meshTriangleRes = res;
 
-                    triangles[t++] = i + 1;
-                    triangles[t++] = i + res;
-                    triangles[t++] = i + res + 1;
+                int t = 0;
+                for (int y = 0; y < res - 1; y++)
+                {
+                    for (int x = 0; x < res - 1; x++)
+                    {
+                        int i = y * res + x;
+                        _meshTriangles[t++] = i;
+                        _meshTriangles[t++] = i + res;
+                        _meshTriangles[t++] = i + 1;
+
+                        _meshTriangles[t++] = i + 1;
+                        _meshTriangles[t++] = i + res;
+                        _meshTriangles[t++] = i + res + 1;
+                    }
                 }
             }
+
+            // A fresh Mesh has no indices of its own, so it needs them uploaded even
+            // when the cached buffer is still valid.
+            bool meshNeedsIndices = indicesStale;
 
             if (_previewMesh == null)
             {
                 _previewMesh = new Mesh { name = "Terrain Preview Mesh" };
+                meshNeedsIndices = true;
             }
-            else
+            else if (indicesStale)
             {
-                // Clear first: leftover triangles from a denser mesh would index
-                // vertices that no longer exist.
+                // Clear only when the grid size changed: leftover triangles from a
+                // denser mesh would index vertices that no longer exist. Clearing on
+                // every rebuild would discard the index buffer needlessly.
                 _previewMesh.Clear();
             }
 
-            // 513² is 263k vertices, well past the 65k limit of 16-bit indices.
-            _previewMesh.indexFormat = res * res > 65000
-                ? UnityEngine.Rendering.IndexFormat.UInt32
-                : UnityEngine.Rendering.IndexFormat.UInt16;
+            if (meshNeedsIndices)
+            {
+                // Past 65k vertices the default 16-bit indices cannot address the mesh.
+                _previewMesh.indexFormat = res * res > 65000
+                    ? UnityEngine.Rendering.IndexFormat.UInt32
+                    : UnityEngine.Rendering.IndexFormat.UInt16;
+            }
 
             _previewMesh.vertices = vertices;
             _previewMesh.uv = uvs;
             _previewMesh.colors = colors;
-            _previewMesh.triangles = triangles;
+
+            // Vertices must be assigned before indices that reference them.
+            if (meshNeedsIndices) _previewMesh.triangles = _meshTriangles;
+
             _previewMesh.RecalculateNormals();
             _previewMesh.RecalculateBounds();
 
