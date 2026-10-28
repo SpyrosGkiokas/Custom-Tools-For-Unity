@@ -26,8 +26,6 @@ for per-run maps.
 
 → **[HDRP version](TerrainGeneration/TerrainGenerator-HDRP/)** · **[URP version](TerrainGeneration/TerrainGenerator-URP/)**
 
-<!-- Add a screenshot or GIF of the Inspector preview here — it sells this tool better than any description. -->
-
 ---
 
 ## Getting started
