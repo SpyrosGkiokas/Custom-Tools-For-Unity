@@ -22,7 +22,7 @@ for per-run maps.
 - Seeded and deterministic — share a seed to share the exact map
 - Live preview with hillshading that refreshes as you tune
 
-→ **[HDRP version](terrain_generation/hdrp/)** · **[URP version](terrain_generation/urp/)**
+→ **[HDRP version](TerrainGeneration/TerrainGenerator-HDRP/)** · **[URP version](TerrainGeneration/TerrainGenerator-URP/)**
 
 <!-- Add a screenshot or GIF of the Inspector preview here — it sells this tool better than any description. -->
 
@@ -46,9 +46,9 @@ Each tool's own README covers setup, every setting, and runtime usage.
 ## Which pipeline am I on?
 
 **Edit > Project Settings > Graphics** and look at the Render Pipeline Asset. If it names
-`HDRenderPipelineAsset` you want `hdrp/`; if it names `UniversalRenderPipelineAsset` you
-want `urp/`. Empty means you're on the Built-in pipeline, where neither folder's material
-will work as-is.
+`HDRenderPipelineAsset` you want the `-HDRP` folder; if it names
+`UniversalRenderPipelineAsset` you want the `-URP` one. Empty means you're on the Built-in
+pipeline, where neither folder's material will work as-is.
 
 ---
 
@@ -59,12 +59,12 @@ Issues and pull requests are welcome — bug reports, new tools, or pipeline fix
 If you're adding a tool, the convention here is:
 
 ```
-tool_name/
-  hdrp/
+ToolName/
+  ToolName-HDRP/
     Runtime/   ships in builds, with a .asmdef
     Editor/    editor-only, .asmdef restricted to the Editor platform
     README.md  setup, settings reference, runtime usage
-  urp/
+  ToolName-URP/
     …same shape
 ```
 

@@ -15,8 +15,7 @@ The two assembly definitions keep `Editor/` out of your builds automatically.
 
 ## Install
 
-1. Copy the `hdrp` folder into your project's `Assets/` (rename it to something like
-   `Assets/CustomTools/TerrainGeneration` if you prefer).
+1. Copy the `TerrainGenerator-HDRP` folder into your project's `Assets/`.
 2. Wait for Unity to compile. No packages to install beyond HDRP itself.
 
 ## Your first terrain
@@ -196,7 +195,7 @@ inspect is what you get.
 ## Using URP instead
 
 Everything in `Runtime/` is renderer-agnostic — only the material changes. A
-[URP version](../urp/) is already included in this repo, so use that rather than porting
+[URP version](../TerrainGenerator-URP/) is already included in this repo, so use that rather than porting
 by hand.
 
 Both folders can live in the same project: their assemblies, namespaces and menu entries
