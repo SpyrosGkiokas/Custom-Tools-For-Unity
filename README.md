@@ -71,7 +71,17 @@ each layer belongs and paint the whole thing in one click.
   curvature band is guesswork until you can see the curvature
 - Reads heights from the terrain and never changes them
 
-→ **[HDRP version](TerrainPainting/TerrainPainter-HDRP/)** · URP to follow
+<p align="center">
+  <img width="380" alt="Tuning paint rules with the live preview updating"
+       src="https://github.com/user-attachments/assets/c3876b32-c83d-40fb-8a7d-e7223ecae699" />
+</p>
+
+<p align="center">
+  <em>Rules are tuned against a live preview, which also shows each input on its own —
+  slope, curvature and drainage — so it is clear why a layer landed where it did.</em>
+</p>
+
+→ **[HDRP version](TerrainPainting/TerrainPainter-HDRP/)** · **[URP version](TerrainPainting/TerrainPainter-URP/)**
 
 ---
 
