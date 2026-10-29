@@ -44,6 +44,94 @@ namespace CustomTools.TerrainPainting
             new Color(0.40f, 0.65f, 0.62f)
         };
 
+        /// <summary>
+        /// Average colours sampled from each layer's texture. Sampling reads back from
+        /// the GPU, which is far too slow to do per preview rebuild, and a terrain
+        /// layer's texture rarely changes.
+        ///
+        /// Keyed by the texture object itself rather than an id: Unity 6 deprecated
+        /// GetInstanceID in favour of GetEntityId, and keying on the reference avoids
+        /// having to pick between them across versions.
+        /// </summary>
+        static readonly System.Collections.Generic.Dictionary<Texture, Color> SampledColors =
+            new System.Collections.Generic.Dictionary<Texture, Color>();
+
+        /// <summary>
+        /// Drops the sampled colour cache, so an edited or reassigned texture is picked
+        /// up rather than kept from a previous read.
+        /// </summary>
+        public static void ClearSampledColors() => SampledColors.Clear();
+
+        /// <summary>
+        /// Average colour of a layer's diffuse texture, for a preview that approximates
+        /// the painted result rather than colour-coding it.
+        ///
+        /// Falls back to the palette when there is no texture to read: a rule with no
+        /// layer assigned still has to appear as something, and a rule that paints
+        /// nothing visible would be the most confusing possible answer.
+        /// </summary>
+        public static Color SampledLayerColor(TerrainLayer layer, int index)
+        {
+            var texture = layer != null ? layer.diffuseTexture : null;
+            if (texture == null) return LayerColor(index);
+
+            if (SampledColors.TryGetValue(texture, out var cached)) return cached;
+
+            var average = AverageColor(texture) ?? LayerColor(index);
+            SampledColors[texture] = average;
+            return average;
+        }
+
+        /// <summary>
+        /// Reads a texture's average colour by scaling it to a single pixel on the GPU.
+        ///
+        /// Going through a RenderTexture rather than GetPixels is what lets this work on
+        /// any texture: GetPixels needs Read/Write Enabled, which is an import setting
+        /// per asset, and a preview that silently failed on textures nobody had prepared
+        /// would be worse than one that never offered this at all.
+        /// </summary>
+        static Color? AverageColor(Texture texture)
+        {
+            RenderTexture rt = null;
+            RenderTexture previous = RenderTexture.active;
+            Texture2D readback = null;
+
+            try
+            {
+                // Blitting straight to 1x1 lets the GPU's own filtering do the
+                // averaging, in one step rather than a mip chain walked by hand.
+                rt = RenderTexture.GetTemporary(1, 1, 0, RenderTextureFormat.ARGB32);
+                rt.filterMode = FilterMode.Bilinear;
+
+                Graphics.Blit(texture, rt);
+
+                RenderTexture.active = rt;
+                readback = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                readback.ReadPixels(new Rect(0f, 0f, 1f, 1f), 0, 0);
+                readback.Apply(false);
+
+                var c = readback.GetPixel(0, 0);
+
+                // Lift very dark or washed-out samples: a texture that averages to near
+                // black leaves the hillshade with nothing to shade, and the region reads
+                // as a hole rather than a layer.
+                Color.RGBToHSV(c, out float h, out float s, out float v);
+                return Color.HSVToRGB(h, Mathf.Clamp(s, 0.08f, 0.9f), Mathf.Clamp(v, 0.25f, 0.95f));
+            }
+            catch (System.Exception)
+            {
+                // Compressed formats a blit cannot handle, and textures still streaming
+                // in, both land here. The palette is a perfectly good answer.
+                return null;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+                if (readback != null) Object.DestroyImmediate(readback);
+            }
+        }
+
         /// <summary>Colour used to identify layer <paramref name="index"/>.</summary>
         public static Color LayerColor(int index) =>
             LayerColors[Mathf.Abs(index) % LayerColors.Length];
@@ -59,7 +147,8 @@ namespace CustomTools.TerrainPainting
             PreviewChannel channel,
             int soloLayer,
             int resolution,
-            Texture2D existing = null)
+            Texture2D existing = null,
+            Color[] layerColors = null)
         {
             if (analysis == null) return existing;
 
@@ -95,8 +184,8 @@ namespace CustomTools.TerrainPainting
                         PreviewChannel.Slope => SlopeColor(slope),
                         PreviewChannel.Curvature => CurvatureColor(curvature),
                         PreviewChannel.Flow => FlowColor(flow),
-                        PreviewChannel.SoloLayer => SoloColor(splat, nx, ny, soloLayer),
-                        _ => LayersColor(splat, nx, ny)
+                        PreviewChannel.SoloLayer => SoloColor(splat, nx, ny, soloLayer, layerColors),
+                        _ => LayersColor(splat, nx, ny, layerColors)
                     };
 
                     // Light the surface rather than shading it by height. Brightness by
@@ -157,7 +246,40 @@ namespace CustomTools.TerrainPainting
         }
 
         /// <summary>Blends the layer colours by weight, giving the painted result.</summary>
-        static Color LayersColor(float[,,] splat, float nx, float ny)
+        /// <summary>
+        /// Share of the terrain each layer holds, summing to 1 across all layers.
+        ///
+        /// This is the diagnostic the colours cannot give: a layer reading 0% is not
+        /// painting at all, and a layer at 90% is swamping the rest. Either is obvious
+        /// as a number and easy to miss by eye, particularly when two layers sample to
+        /// similar colours.
+        /// </summary>
+        public static float[] Coverage(float[,,] splat)
+        {
+            if (splat == null) return null;
+
+            int res = splat.GetLength(0);
+            int count = splat.GetLength(2);
+            var totals = new float[count];
+
+            for (int y = 0; y < res; y++)
+                for (int x = 0; x < res; x++)
+                    for (int i = 0; i < count; i++)
+                        totals[i] += splat[y, x, i];
+
+            // Weights already sum to 1 per cell, so the grand total is the cell count.
+            float cells = res * res;
+            if (cells <= 0f) return totals;
+
+            for (int i = 0; i < count; i++) totals[i] /= cells;
+            return totals;
+        }
+
+        /// <summary>Colour for layer i: the resolved set when given, the palette otherwise.</summary>
+        static Color Resolve(Color[] colors, int index) =>
+            colors != null && index < colors.Length ? colors[index] : LayerColor(index);
+
+        static Color LayersColor(float[,,] splat, float nx, float ny, Color[] colors)
         {
             if (splat == null) return new Color(0.5f, 0.5f, 0.5f);
 
@@ -175,7 +297,7 @@ namespace CustomTools.TerrainPainting
                 float w = splat[y, x, i];
                 if (w <= 0f) continue;
 
-                var lc = LayerColor(i);
+                var lc = Resolve(colors, i);
                 c.r += lc.r * w;
                 c.g += lc.g * w;
                 c.b += lc.b * w;
@@ -189,7 +311,7 @@ namespace CustomTools.TerrainPainting
         /// coverage at a band edge is visible rather than being hidden by the layers
         /// blended over it.
         /// </summary>
-        static Color SoloColor(float[,,] splat, float nx, float ny, int layer)
+        static Color SoloColor(float[,,] splat, float nx, float ny, int layer, Color[] colors)
         {
             if (splat == null) return new Color(0.2f, 0.2f, 0.2f);
 
@@ -201,7 +323,7 @@ namespace CustomTools.TerrainPainting
             int y = Mathf.Clamp(Mathf.RoundToInt(ny * (res - 1)), 0, res - 1);
 
             float w = splat[y, x, layer];
-            var lc = LayerColor(layer);
+            var lc = Resolve(colors, layer);
             var background = new Color(0.14f, 0.14f, 0.16f);
 
             return Color.Lerp(background, lc, w);

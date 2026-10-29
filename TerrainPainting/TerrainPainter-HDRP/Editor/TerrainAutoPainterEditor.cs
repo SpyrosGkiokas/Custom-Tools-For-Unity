@@ -22,6 +22,16 @@ namespace CustomTools.TerrainPainting.EditorTools
         bool _autoRefresh = true;
         bool _dirty = true;
 
+        /// <summary>
+        /// Sampled layer colours approximate the painted result; the fixed palette tells
+        /// rules apart. Two rock textures sample to nearly the same brown, so the palette
+        /// stays reachable rather than being replaced.
+        /// </summary>
+        bool _sampledColors = true;
+
+        Color[] _layerColors;
+        float[] _coverage;
+
         // Debounce state, as in the generator's Inspector: a slider drag fires a change
         // per mouse move, and each one would re-analyse the terrain and rebuild the
         // splatmap. Flow accumulation sorts every cell, so that is not cheap.
@@ -218,6 +228,11 @@ namespace CustomTools.TerrainPainting.EditorTools
                 RebuildPreview();
 
             DrawPreviewTexture();
+
+            // Only the layers view has layers to list; the channel views are one map.
+            if (_channel == PreviewChannel.Layers || _channel == PreviewChannel.SoloLayer)
+                DrawLayerLegend();
+
             DrawChannelLegend();
         }
 
@@ -250,7 +265,21 @@ namespace CustomTools.TerrainPainting.EditorTools
             using (new EditorGUILayout.HorizontalScope())
             {
                 _autoRefresh = EditorGUILayout.ToggleLeft("Auto refresh", _autoRefresh, GUILayout.Width(110));
-                if (GUILayout.Button("Refresh")) RebuildNow();
+
+                EditorGUI.BeginChangeCheck();
+                _sampledColors = EditorGUILayout.ToggleLeft(
+                    new GUIContent("Texture colours", "Off shows distinct colours instead, for telling similar layers apart."),
+                    _sampledColors,
+                    GUILayout.Width(120));
+                if (EditorGUI.EndChangeCheck()) RebuildNow();
+
+                if (GUILayout.Button("Refresh"))
+                {
+                    // An explicit refresh should pick up an edited or reassigned
+                    // texture, which is the main reason to press it after changing one.
+                    PaintPreview.ClearSampledColors();
+                    RebuildNow();
+                }
             }
         }
 
@@ -279,7 +308,9 @@ namespace CustomTools.TerrainPainting.EditorTools
                 PreviewChannel.Curvature => "Blue is valleys and hollows, orange is ridges and crests, grey is flat.",
                 PreviewChannel.Flow => "Blue is where water drains and collects; brown sheds it.",
                 PreviewChannel.SoloLayer => "One layer's weight alone. Faded areas are partial coverage at a band edge.",
-                _ => "Each rule in its own colour, blended by weight. Colours identify layers, not textures."
+                _ => _sampledColors
+                    ? "Each rule in its texture's average colour, blended by weight."
+                    : "Each rule in a distinct colour, blended by weight. Colours identify layers, not textures."
             };
 
             EditorGUILayout.LabelField(legend, EditorStyles.miniLabel);
@@ -326,8 +357,88 @@ namespace CustomTools.TerrainPainting.EditorTools
                     MacroStrength())
                 : null;
 
+            _layerColors = ResolveLayerColors(active);
+            _coverage = PaintPreview.Coverage(_splat);
+
             _preview = PaintPreview.Render(
-                _analysis, _splat, _channel, _soloLayer, PreviewResolution, _preview);
+                _analysis, _splat, _channel, _soloLayer, PreviewResolution, _preview, _layerColors);
+        }
+
+        /// <summary>
+        /// One colour per active rule, sampled from its texture or taken from the
+        /// palette depending on the toggle.
+        /// </summary>
+        Color[] ResolveLayerColors(System.Collections.Generic.List<PaintRule> active)
+        {
+            var colors = new Color[active.Count];
+
+            for (int i = 0; i < active.Count; i++)
+            {
+                colors[i] = _sampledColors
+                    ? PaintPreview.SampledLayerColor(active[i].layer, i)
+                    : PaintPreview.LayerColor(i);
+            }
+
+            return colors;
+        }
+
+        /// <summary>
+        /// Lists each rule with its colour and how much of the terrain it holds. The
+        /// percentages are what explain an unexpected preview: a rule at 0% is not
+        /// painting, and one at 90% is swamping everything else.
+        /// </summary>
+        void DrawLayerLegend()
+        {
+            var active = _painter.ActiveRules();
+            if (active.Count == 0 || _layerColors == null) return;
+
+            EditorGUILayout.Space(2f);
+
+            for (int i = 0; i < active.Count && i < _layerColors.Length; i++)
+            {
+                var row = EditorGUILayout.GetControlRect(false, 16f);
+
+                var swatch = new Rect(row.x, row.y + 2f, 12f, 12f);
+                EditorGUI.DrawRect(swatch, _layerColors[i]);
+
+                string name = string.IsNullOrEmpty(active[i].name) ? $"Layer {i}" : active[i].name;
+                if (active[i].isBaseLayer) name += "  (base)";
+
+                var labelRect = new Rect(swatch.xMax + 6f, row.y, row.width - 80f, row.height);
+                EditorGUI.LabelField(labelRect, name, EditorStyles.miniLabel);
+
+                if (_coverage != null && i < _coverage.Length)
+                {
+                    float percent = _coverage[i] * 100f;
+
+                    var percentRect = new Rect(row.xMax - 60f, row.y, 56f, row.height);
+                    var style = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleRight };
+
+                    // A rule covering almost nothing is nearly always a mistake, and the
+                    // reason is never visible in the preview itself.
+                    if (percent < 0.5f) style.normal.textColor = new Color(0.90f, 0.55f, 0.35f);
+
+                    EditorGUI.LabelField(percentRect, percent < 0.5f ? "~0%" : $"{percent:0.#}%", style);
+                }
+            }
+
+            if (_coverage == null) return;
+
+            // Only the first such rule is called out. Several at once usually share one
+            // cause - a terrain whose height range nothing was written against - and a
+            // stack of identical warnings buries the preview rather than explaining it.
+            for (int i = 0; i < active.Count && i < _coverage.Length; i++)
+            {
+                if (_coverage[i] * 100f >= 0.5f) continue;
+
+                string name = string.IsNullOrEmpty(active[i].name) ? $"Layer {i}" : active[i].name;
+
+                EditorGUILayout.HelpBox(
+                    $"\"{name}\" covers almost none of this terrain. Its bands may be " +
+                    "outside the range this terrain actually reaches.",
+                    MessageType.Info);
+                return;
+            }
         }
 
         // --- paint ---------------------------------------------------------
