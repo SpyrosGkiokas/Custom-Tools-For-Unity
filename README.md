@@ -57,6 +57,22 @@ for per-run maps.
 
 → **[HDRP version](TerrainGeneration/TerrainGenerator-HDRP/)** · **[URP version](TerrainGeneration/TerrainGenerator-URP/)**
 
+### 🎨 Terrain Auto Painter
+
+Rule-based texturing for **any** terrain — sculpted, imported or generated. Describe where
+each layer belongs and paint the whole thing in one click.
+
+- **Four inputs, not two** — height and slope, plus curvature to tell a ridge from a
+  valley, and drainage to find the ground water actually runs through
+- Riverbeds and damp hollows as real layers — the places height and slope alone cannot
+  describe, since a wet channel and the dry ground beside it are the same height and angle
+- Per-layer noise masks, so a transition breaks up instead of reading as a contour line
+- Live Inspector preview of the result **and** of each input on its own — tuning a
+  curvature band is guesswork until you can see the curvature
+- Reads heights from the terrain and never changes them
+
+→ **[HDRP version](TerrainPainting/TerrainPainter-HDRP/)** · URP to follow
+
 ---
 
 ## Getting started
