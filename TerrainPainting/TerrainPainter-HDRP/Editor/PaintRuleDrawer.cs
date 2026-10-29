@@ -52,11 +52,9 @@ namespace CustomTools.TerrainPainting.EditorTools
             // Collapsed: the header line only.
             if (!property.isExpanded) return 1;
 
-            // Header, terrain layer, base toggle, height, slope, softness, strength.
-            int rows = 7;
-
-            // The Advanced foldout is always drawn when the rule is open.
-            rows += 1;
+            // Header, terrain layer, base toggle, height, slope, softness, strength,
+            // then the Advanced foldout, which is drawn whenever the rule is open.
+            int rows = 8;
 
             if (AdvancedOpen(property))
             {
@@ -74,8 +72,10 @@ namespace CustomTools.TerrainPainting.EditorTools
         {
             float height = RowCount(property) * (Line + Gap);
 
-            // The gap below the header, and a little breathing room under the rule so
-            // consecutive rules do not read as one block.
+            // RowCount times the row pitch lands exactly on the bottom of the last
+            // control, verified against what OnGUI advances through in every state. The
+            // remaining gap separates consecutive rules in the list, which otherwise
+            // read as one block.
             if (property.isExpanded) height += Gap * 3f;
 
             return height;
@@ -107,12 +107,19 @@ namespace CustomTools.TerrainPainting.EditorTools
             }
 
             // Drawing past the reserved rect is what makes rules overlap each other, and
-            // it is invisible in code review: the two counts simply drift apart. Half a
-            // row of slack absorbs rounding without hiding a real miscount.
-            if (row.y > rect.yMax + Line * 0.5f)
+            // it is invisible in code review: the two counts simply drift apart.
+            //
+            // row.y sits one row below the last control, since both halves advance past
+            // whatever they drew last, so that row is taken off before comparing. The
+            // remaining slack covers the frame after the Advanced foldout is toggled:
+            // the height for that frame was measured against the previous state, and the
+            // layout corrects itself on the repaint that follows.
+            float drawnBottom = row.y - (Line + Gap);
+
+            if (drawnBottom > rect.yMax + Line)
             {
                 Debug.LogWarning(
-                    $"PaintRuleDrawer drew {row.y - rect.yMax:0}px past its reserved height. " +
+                    $"PaintRuleDrawer drew {drawnBottom - rect.yMax:0}px past its reserved height. " +
                     "RowCount is out of step with the rows OnGUI draws.");
             }
         }
@@ -227,7 +234,18 @@ namespace CustomTools.TerrainPainting.EditorTools
 
             var headerRect = new Rect(row.x, row.y, row.width, Line);
             bool nowOpen = EditorGUI.Foldout(headerRect, open, "Advanced", true);
-            if (nowOpen != open) EditorPrefs.SetBool(key, nowOpen);
+
+            if (nowOpen != open)
+            {
+                EditorPrefs.SetBool(key, nowOpen);
+
+                // The height for this frame was already measured against the old state,
+                // so the new rows would draw into space nobody reserved. Keep drawing
+                // the old state and let the next pass lay out the new one, which is the
+                // same frame of delay every foldout in the Inspector has.
+                GUI.changed = true;
+                nowOpen = open;
+            }
 
             row.y += Line + Gap;
             if (!nowOpen) return row.y;
