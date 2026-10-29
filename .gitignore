@@ -48,3 +48,14 @@ TODO.local
 # blob this size stays in clone history forever.
 Gifs/
 *.gif
+
+# Settings assets created while testing. Unity saves a new asset into whichever
+# folder is selected in the Project window, so these land inside a tool folder by
+# accident rather than by choice. Committing one ships it to everyone who copies
+# that folder, pointing at a script they may not have installed.
+#
+# Presets are the exception: those are shipped deliberately.
+*.asset
+*.asset.meta
+!**/Presets/*.asset
+!**/Presets/*.asset.meta
