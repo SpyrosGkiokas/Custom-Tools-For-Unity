@@ -19,7 +19,7 @@ namespace CustomTools.TerrainPainting.EditorTools
         const float Gap = 2f;
         const float SwatchWidth = 34f;
 
-        static GUIStyle _summaryStyle, _disabledNameStyle;
+        static GUIStyle _summaryStyle, _disabledNameStyle, _hintStyle;
 
         // EditorStyles is unavailable during static initialization, hence the lazy get.
         static GUIStyle SummaryStyle => _summaryStyle ??= new GUIStyle(EditorStyles.miniLabel)
@@ -33,28 +33,52 @@ namespace CustomTools.TerrainPainting.EditorTools
             normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
         };
 
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        static GUIStyle HintStyle => _hintStyle ??= new GUIStyle(EditorStyles.miniLabel)
         {
-            if (!property.isExpanded) return Line + Gap;
+            fontStyle = FontStyle.Italic,
+            normal = { textColor = new Color(0.5f, 0.5f, 0.5f) }
+        };
 
-            // Header, layer, base toggle, then the always-shown essentials.
-            float height = (Line + Gap) * 6f;
+        /// <summary>
+        /// Rows this rule draws, which is what its height is measured from.
+        ///
+        /// Counting here rather than in GetPropertyHeight keeps one number in one place:
+        /// the height and the drawing have to agree exactly, and when they were counted
+        /// separately a row added to the drawing was missed by the measurement, so rules
+        /// drew over each other.
+        /// </summary>
+        static int RowCount(SerializedProperty property)
+        {
+            // Collapsed: the header line only.
+            if (!property.isExpanded) return 1;
+
+            // Header, terrain layer, base toggle, height, slope, softness, strength.
+            int rows = 7;
+
+            // The Advanced foldout is always drawn when the rule is open.
+            rows += 1;
 
             if (AdvancedOpen(property))
             {
-                // Curvature and flow are a toggle plus a range each; the noise mask is a
-                // toggle plus three fields when on.
-                height += (Line + Gap) * 5f;
+                // Shape, its caption, wetness, its caption, the noise toggle.
+                rows += 5;
 
-                if (property.FindPropertyRelative("useNoiseMask").boolValue)
-                    height += (Line + Gap) * 3f;
-            }
-            else
-            {
-                height += Line + Gap;
+                // Patch size, amount, variation.
+                if (property.FindPropertyRelative("useNoiseMask").boolValue) rows += 3;
             }
 
-            return height + Gap * 2f;
+            return rows;
+        }
+
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            float height = RowCount(property) * (Line + Gap);
+
+            // The gap below the header, and a little breathing room under the rule so
+            // consecutive rules do not read as one block.
+            if (property.isExpanded) height += Gap * 3f;
+
+            return height;
         }
 
         public override void OnGUI(Rect rect, SerializedProperty property, GUIContent label)
@@ -80,6 +104,16 @@ namespace CustomTools.TerrainPainting.EditorTools
                 row.y = DrawAdvanced(row, property);
 
                 EditorGUI.indentLevel--;
+            }
+
+            // Drawing past the reserved rect is what makes rules overlap each other, and
+            // it is invisible in code review: the two counts simply drift apart. Half a
+            // row of slack absorbs rounding without hiding a real miscount.
+            if (row.y > rect.yMax + Line * 0.5f)
+            {
+                Debug.LogWarning(
+                    $"PaintRuleDrawer drew {row.y - rect.yMax:0}px past its reserved height. " +
+                    "RowCount is out of step with the rows OnGUI draws.");
             }
         }
 
@@ -207,10 +241,7 @@ namespace CustomTools.TerrainPainting.EditorTools
                 "Shape", -1f, 1f, "{0:0.00}");
             row.y += Line + Gap;
 
-            EditorGUI.LabelField(
-                new Rect(row.x, row.y, row.width, Line),
-                " -1 valley · 0 flat · +1 ridge",
-                EditorStyles.miniLabel);
+            DrawCaption(row, "-1 valley · 0 flat · +1 ridge");
             row.y += Line + Gap;
 
             DrawBandRow(
@@ -220,10 +251,7 @@ namespace CustomTools.TerrainPainting.EditorTools
                 "Wetness", 0f, 1f, "{0:0.00}");
             row.y += Line + Gap;
 
-            EditorGUI.LabelField(
-                new Rect(row.x, row.y, row.width, Line),
-                " 0 sheds water · 1 collects it",
-                EditorStyles.miniLabel);
+            DrawCaption(row, "0 sheds water · 1 collects it");
             row.y += Line + Gap;
 
             var useNoise = property.FindPropertyRelative("useNoiseMask");
@@ -260,6 +288,19 @@ namespace CustomTools.TerrainPainting.EditorTools
         }
 
         /// <summary>
+        /// A hint under a band, aligned with the slider rather than the window edge, so
+        /// it reads as describing that control instead of floating beside it.
+        /// </summary>
+        static void DrawCaption(Rect row, string text)
+        {
+            float indent = EditorGUI.indentLevel * 15f;
+            float labelColumn = Mathf.Max(52f, EditorGUIUtility.labelWidth - indent);
+
+            var rect = new Rect(row.x + labelColumn + 20f, row.y, row.width - labelColumn - 20f, Line);
+            EditorGUI.LabelField(rect, text, HintStyle);
+        }
+
+        /// <summary>
         /// A band on one line: a checkbox for whether it applies, then its range. The
         /// range is greyed rather than hidden when off, so the values you set are still
         /// there when you switch it back on.
@@ -273,11 +314,16 @@ namespace CustomTools.TerrainPainting.EditorTools
             float max,
             string format)
         {
-            var labelRect = new Rect(row.x, row.y, EditorGUIUtility.labelWidth, Line);
+            // GetControlRect already insets by the indent, while labelWidth is measured
+            // from the unindented edge. Subtracting the indent keeps the label column
+            // the same width as the fields above it instead of pushing it right.
+            float indent = EditorGUI.indentLevel * 15f;
+            float labelColumn = Mathf.Max(52f, EditorGUIUtility.labelWidth - indent);
+
+            var labelRect = new Rect(row.x, row.y, labelColumn, Line);
             EditorGUI.LabelField(labelRect, label);
 
-            float x = labelRect.xMax;
-            var toggleRect = new Rect(x, row.y, 16f, Line);
+            var toggleRect = new Rect(labelRect.xMax, row.y, 16f, Line);
             use.boolValue = EditorGUI.Toggle(toggleRect, use.boolValue);
 
             using (new EditorGUI.DisabledScope(!use.boolValue))
@@ -286,16 +332,31 @@ namespace CustomTools.TerrainPainting.EditorTools
                 float lo = Mathf.Min(value.x, value.y);
                 float hi = Mathf.Max(value.x, value.y);
 
-                var sliderRect = new Rect(x + 20f, row.y, row.width - (x - row.x) - 20f, Line);
+                // The numbers get a column of their own. Drawn over the slider they sat
+                // on top of the handles they describe, which is unreadable at any width
+                // and hides the very handles being dragged.
+                const float ValueColumn = 74f;
+
+                float sliderX = toggleRect.xMax + 4f;
+                float available = row.xMax - sliderX;
+                float sliderWidth = Mathf.Max(40f, available - ValueColumn);
+
+                var sliderRect = new Rect(sliderX, row.y, sliderWidth, Line);
 
                 // MinMaxSlider rather than two fields: the pair is one band, and dragging
                 // its ends is how a band actually gets tuned.
                 EditorGUI.MinMaxSlider(sliderRect, ref lo, ref hi, min, max);
 
-                if (use.boolValue)
+                // Only drawn where there is honestly room: squeezed into a few pixels the
+                // text clips mid-number and reads as a different value.
+                if (available - sliderWidth >= 40f)
                 {
-                    string text = string.Format(format, lo) + " – " + string.Format(format, hi);
-                    EditorGUI.LabelField(sliderRect, text, SummaryStyle);
+                    var valueRect = new Rect(sliderRect.xMax + 4f, row.y, row.xMax - sliderRect.xMax - 4f, Line);
+                    string text = use.boolValue
+                        ? string.Format(format, lo) + " – " + string.Format(format, hi)
+                        : "any";
+
+                    EditorGUI.LabelField(valueRect, text, SummaryStyle);
                 }
 
                 range.vector2Value = new Vector2(lo, hi);
