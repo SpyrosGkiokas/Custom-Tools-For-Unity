@@ -139,7 +139,7 @@ namespace CustomTools.TerrainPainting.EditorTools
             EditorGUILayout.PropertyField(settingsObject.FindProperty("rules"), true);
 
             EditorGUILayout.Space();
-            EditorGUILayout.PropertyField(settingsObject.FindProperty("alphamapResolution"));
+            DrawAlphamapResolution(settingsObject);
             EditorGUILayout.PropertyField(settingsObject.FindProperty("smoothing"));
 
             var macro = settingsObject.FindProperty("macroVariation");
@@ -158,6 +158,44 @@ namespace CustomTools.TerrainPainting.EditorTools
                 settingsObject.ApplyModifiedProperties();
                 _dirty = true;
             }
+        }
+
+        /// <summary>
+        /// Alphamap resolution as a fixed set of choices rather than a free number.
+        ///
+        /// TerrainData only accepts powers of two, so a typed 2024 silently became 2048
+        /// and the field went on showing a value the tool was not using. Offering only
+        /// the valid sizes means the field cannot disagree with the result.
+        /// </summary>
+        static readonly int[] AlphamapResolutions = { 128, 256, 512, 1024, 2048 };
+        static readonly string[] AlphamapLabels = { "128", "256", "512", "1024", "2048" };
+
+        void DrawAlphamapResolution(SerializedObject settingsObject)
+        {
+            var property = settingsObject.FindProperty("alphamapResolution");
+
+            int current = property.intValue;
+            int index = System.Array.IndexOf(AlphamapResolutions, current);
+
+            // An asset saved before this was a popup can hold any number, so snap to the
+            // nearest valid size rather than silently showing the first entry.
+            if (index < 0)
+            {
+                int nearest = Mathf.Clamp(Mathf.ClosestPowerOfTwo(Mathf.Max(16, current)), 128, 2048);
+                index = Mathf.Max(0, System.Array.IndexOf(AlphamapResolutions, nearest));
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.PrefixLabel(new GUIContent(
+                    "Splatmap Resolution",
+                    "How finely the layer weights are stored. Higher resolves finer " +
+                    "transitions and costs memory on the terrain asset."));
+
+                index = GUILayout.Toolbar(index, AlphamapLabels);
+            }
+
+            property.intValue = AlphamapResolutions[index];
         }
 
         // --- preview -------------------------------------------------------

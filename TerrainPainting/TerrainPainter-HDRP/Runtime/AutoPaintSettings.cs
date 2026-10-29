@@ -89,9 +89,13 @@ namespace CustomTools.TerrainPainting
             };
         }
 
-        /// <summary>Alphamap resolution clamped to what a TerrainData will accept.</summary>
+        /// <summary>
+        /// Alphamap resolution snapped to what a TerrainData will accept. The Inspector
+        /// offers only valid sizes, so this matters for assets saved before it did, and
+        /// for anything setting the field from script.
+        /// </summary>
         public int ResolvedAlphamapResolution =>
-            Mathf.Clamp(Mathf.ClosestPowerOfTwo(Mathf.Max(16, alphamapResolution)), 16, 2048);
+            Mathf.Clamp(Mathf.ClosestPowerOfTwo(Mathf.Max(128, alphamapResolution)), 128, 2048);
 
         /// <summary>Rules that will contribute, in the order they are evaluated.</summary>
         public int ActiveRuleCount
