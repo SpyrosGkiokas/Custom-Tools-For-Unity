@@ -8,6 +8,24 @@ editor code so nothing editor-only ends up in your builds.
 
 ---
 
+## Why this exists
+
+I work on Unity projects alone. A team splits the work that does not really need a person
+doing it — placing rocks down a hillside, deciding which slopes get grass and which get
+scree — but on your own, that work still has to happen, and it comes out of the time you
+wanted to spend on the parts only you can do.
+
+So I automate it. Each tool here gets built when I hit the wall it solves, and there are
+plenty of walls left — terrain was simply the first. What they have in common is being the
+form I wanted and could not find: no package manager, no dependency tree, no
+half-abandoned asset store plugin that breaks on the next Unity version. Copy a folder,
+get on with it.
+
+They are MIT because they are more useful to me working than sitting in a private repo.
+If you fix something or add a tool, that is a problem neither of us has to solve twice.
+
+---
+
 ## Tools
 
 ### 🏔 Terrain Generation
