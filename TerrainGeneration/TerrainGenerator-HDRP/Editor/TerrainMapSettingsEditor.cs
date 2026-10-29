@@ -22,6 +22,21 @@ namespace CustomTools.TerrainGeneration.EditorTools
         bool _autoRefresh = true;
         bool _dirty = true;
 
+        // Debounce state. A slider drag fires a change per mouse move, and each one
+        // would otherwise run the whole pipeline: warp, erosion, thermal, rivers,
+        // strata and micro-relief, which is ~365ms at 513px and over a second at
+        // 1025px. So a pending change waits for the drag to finish instead.
+        bool _wasDragging;
+        bool _rebuildImmediately;
+        double _settledAt = -1d;
+
+        /// <summary>
+        /// Idle wait for edits that have no release to detect, such as typing into a
+        /// float field, where every keystroke is its own change. A drag does not wait
+        /// this out: releasing the mouse is an explicit "this is the value I want".
+        /// </summary>
+        const double IdleDebounceSeconds = 1d;
+
         // 3D preview state.
         PreviewRenderUtility _previewUtility;
         Mesh _previewMesh;
@@ -181,7 +196,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                     {
                         TerrainPresets.Apply(presets[picked - 1], _settings);
                         serializedObject.Update();
-                        _dirty = true;
+                        RebuildNow();
                     }
                 }
 
@@ -620,6 +635,69 @@ namespace CustomTools.TerrainGeneration.EditorTools
             return Mathf.Max(1, Mathf.RoundToInt(iterations * perDroplet * resolutionFactor));
         }
 
+        /// <summary>
+        /// Marks the preview stale from a click rather than an edit: a button or a
+        /// toolbar choice is already a deliberate action, so it skips the idle wait.
+        /// </summary>
+        void RebuildNow()
+        {
+            _dirty = true;
+            _wasDragging = false;
+            _settledAt = -1d;
+            _rebuildImmediately = true;
+        }
+
+        /// <summary>
+        /// True once a pending change has settled. While a control is being dragged the
+        /// rebuild is held off entirely, then runs the moment the mouse is released, so
+        /// a slider sweep costs one generation instead of one per mouse move. Edits with
+        /// no release to detect, such as typing a number, fall back to an idle timer.
+        /// </summary>
+        bool ReadyToRebuild()
+        {
+            if (_rebuildImmediately)
+            {
+                _rebuildImmediately = false;
+                return true;
+            }
+
+            // A first build has nothing to debounce: without it the panel is empty.
+            if (_heights == null) return true;
+
+            bool dragging = GUIUtility.hotControl != 0;
+
+            if (dragging)
+            {
+                _wasDragging = true;
+                // Keep repainting so the release is noticed promptly even if the
+                // pointer then sits still over the Inspector.
+                Repaint();
+                return false;
+            }
+
+            if (_wasDragging)
+            {
+                // Released. This is a deliberate choice of value, so build now rather
+                // than making the user wait out a timer on top of the generation itself.
+                _wasDragging = false;
+                _settledAt = -1d;
+                return true;
+            }
+
+            // Typed or stepped change: wait for a quiet period, restarting on each edit.
+            double now = EditorApplication.timeSinceStartup;
+            if (_settledAt < 0d) _settledAt = now;
+
+            if (now - _settledAt < IdleDebounceSeconds)
+            {
+                Repaint();
+                return false;
+            }
+
+            _settledAt = -1d;
+            return true;
+        }
+
         void DrawPreviewSection()
         {
             EditorGUILayout.LabelField("Preview", EditorStyles.boldLabel);
@@ -629,7 +707,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
             // Only regenerate on a Layout event. Orbiting the 3D view calls Repaint
             // continuously, and generation now runs a multi-stage pipeline, so
             // rebuilding per repaint would re-run seconds of simulation mid-drag.
-            bool mayRebuild = Event.current.type == EventType.Layout;
+            bool mayRebuild = Event.current.type == EventType.Layout && ReadyToRebuild();
 
             if (_dirty && mayRebuild && (_autoRefresh || _heights == null))
                 RebuildPreview();
@@ -655,7 +733,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 {
                     EditorPrefs.SetInt(PrefKey("mode"), (int)_mode);
                     // The mesh is built lazily, so switching to 3D first time needs a build.
-                    if (_mode == PreviewMode.Mesh3D && _previewMesh == null) _dirty = true;
+                    if (_mode == PreviewMode.Mesh3D && _previewMesh == null) RebuildNow();
                 }
             }
 
@@ -670,7 +748,7 @@ namespace CustomTools.TerrainGeneration.EditorTools
                 {
                     _previewResolution = PreviewResolutions[index];
                     EditorPrefs.SetInt(PrefKey("res"), _previewResolution);
-                    _dirty = true;
+                    RebuildNow();
                 }
             }
 
@@ -678,14 +756,14 @@ namespace CustomTools.TerrainGeneration.EditorTools
             {
                 _autoRefresh = EditorGUILayout.ToggleLeft("Auto refresh", _autoRefresh, GUILayout.Width(110));
 
-                if (GUILayout.Button("Refresh")) _dirty = true;
+                if (GUILayout.Button("Refresh")) RebuildNow();
 
                 if (GUILayout.Button("New Seed"))
                 {
                     Undo.RecordObject(_settings, "New Seed");
                     _settings.seed = Random.Range(int.MinValue, int.MaxValue);
                     EditorUtility.SetDirty(_settings);
-                    _dirty = true;
+                    RebuildNow();
                 }
             }
 
