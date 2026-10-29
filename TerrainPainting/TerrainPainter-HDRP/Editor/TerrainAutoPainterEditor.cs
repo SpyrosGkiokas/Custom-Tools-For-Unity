@@ -132,6 +132,17 @@ namespace CustomTools.TerrainPainting.EditorTools
             EditorGUILayout.PropertyField(settingsObject.FindProperty("alphamapResolution"));
             EditorGUILayout.PropertyField(settingsObject.FindProperty("smoothing"));
 
+            var macro = settingsObject.FindProperty("macroVariation");
+            EditorGUILayout.PropertyField(macro, new GUIContent("Macro Variation"));
+
+            if (macro.boolValue)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(settingsObject.FindProperty("macroSize"), new GUIContent("Region Size (m)"));
+                EditorGUILayout.PropertyField(settingsObject.FindProperty("macroStrength"), new GUIContent("Amount"));
+                EditorGUI.indentLevel--;
+            }
+
             if (EditorGUI.EndChangeCheck())
             {
                 settingsObject.ApplyModifiedProperties();
@@ -281,6 +292,18 @@ namespace CustomTools.TerrainPainting.EditorTools
             }
         }
 
+        /// <summary>Macro size when the setting is on, 0 when it is off or unassigned.</summary>
+        float MacroSize() =>
+            _painter.settings != null && _painter.settings.macroVariation
+                ? _painter.settings.macroSize
+                : 0f;
+
+        /// <summary>Macro strength when the setting is on, 0 when it is off or unassigned.</summary>
+        float MacroStrength() =>
+            _painter.settings != null && _painter.settings.macroVariation
+                ? _painter.settings.macroStrength
+                : 0f;
+
         void RebuildPreview()
         {
             _dirty = false;
@@ -298,7 +321,9 @@ namespace CustomTools.TerrainPainting.EditorTools
                     _analysis,
                     active.ToArray(),
                     PreviewResolution,
-                    _painter.settings != null ? _painter.settings.smoothing : 0)
+                    _painter.settings != null ? _painter.settings.smoothing : 0,
+                    MacroSize(),
+                    MacroStrength())
                 : null;
 
             _preview = PaintPreview.Render(

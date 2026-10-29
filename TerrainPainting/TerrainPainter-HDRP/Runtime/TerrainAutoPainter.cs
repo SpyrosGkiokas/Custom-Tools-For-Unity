@@ -128,7 +128,13 @@ namespace CustomTools.TerrainPainting
 
             int alphaRes = settings.ResolvedAlphamapResolution;
 
-            var splat = SplatmapPainter.Build(analysis, active.ToArray(), alphaRes, settings.smoothing);
+            var splat = SplatmapPainter.Build(
+                analysis,
+                active.ToArray(),
+                alphaRes,
+                settings.smoothing,
+                settings.macroVariation ? settings.macroSize : 0f,
+                settings.macroVariation ? settings.macroStrength : 0f);
             if (splat == null)
             {
                 error = "Painting produced no weights.";

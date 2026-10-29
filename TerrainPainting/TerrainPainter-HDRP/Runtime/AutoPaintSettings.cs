@@ -25,6 +25,22 @@ namespace CustomTools.TerrainPainting
             "0 applies the rules exactly as written.")]
         [Range(0, 4)] public int smoothing = 0;
 
+        [Header("Macro Variation")]
+
+        [Tooltip(
+            "Varies which layers dominate across the terrain, so the same rule does not " +
+            "paint identically from one side of the map to the other.")]
+        public bool macroVariation = false;
+
+        [Tooltip(
+            "Size of the variation in metres. This should be large - a few hundred metres " +
+            "or more - since the point is variation across the landscape rather than " +
+            "within a single view.")]
+        [Min(10f)] public float macroSize = 600f;
+
+        [Tooltip("How strongly the variation shifts the balance between layers.")]
+        [Range(0f, 1f)] public float macroStrength = 0.35f;
+
         /// <summary>
         /// Rules for a plausible temperate terrain, so a fresh asset paints something
         /// recognisable rather than one flat layer. The textures are left unassigned:

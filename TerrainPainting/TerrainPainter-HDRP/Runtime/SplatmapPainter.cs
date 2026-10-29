@@ -23,7 +23,9 @@ namespace CustomTools.TerrainPainting
             TerrainAnalysis analysis,
             PaintRule[] rules,
             int alphamapResolution,
-            int smoothing = 0)
+            int smoothing = 0,
+            float macroSize = 0f,
+            float macroStrength = 0f)
         {
             if (analysis == null) throw new System.ArgumentNullException(nameof(analysis));
             if (rules == null || rules.Length == 0) return null;
@@ -53,10 +55,28 @@ namespace CustomTools.TerrainPainting
 
                     float total = 0f;
 
+                    // One macro value per cell, shared by every rule. Scaling all the
+                    // weights together would do nothing - normalisation divides it
+                    // straight back out - so each rule takes the value differently and
+                    // what shifts is the balance between them.
+                    bool useMacro = macroStrength > 0f && macroSize > 0f;
+                    float macro = useMacro ? Macro(worldX, worldZ, macroSize) : 0.5f;
+
                     for (int i = 0; i < count; i++)
                     {
                         float w = rules[i].Evaluate(height, slope, curvature, flow);
                         if (w > 0f) w *= rules[i].NoiseMask(worldX, worldZ);
+
+                        // Alternating rules favour opposite ends of the macro value, so
+                        // regions emerge where one layer leads and its neighbour recedes
+                        // - lusher here, barer there - rather than the whole map shifting
+                        // together. A base layer is left out: it is the floor under the
+                        // others, and varying it would reintroduce the gaps it prevents.
+                        if (useMacro && w > 0f && !rules[i].isBaseLayer)
+                        {
+                            float favour = (i & 1) == 0 ? macro : 1f - macro;
+                            w *= Mathf.Lerp(1f, favour * 2f, macroStrength);
+                        }
 
                         // The noise mask must not cut a base layer below its floor:
                         // that floor is what guarantees every cell has a layer, and
@@ -88,6 +108,21 @@ namespace CustomTools.TerrainPainting
             if (smoothing > 0) Smooth(map, smoothing);
 
             return map;
+        }
+
+        /// <summary>
+        /// Large-scale 0..1 variation across the terrain. Two octaves rather than one,
+        /// so regions have some internal shape instead of reading as a smooth gradient
+        /// from one corner of the map to the other.
+        /// </summary>
+        static float Macro(float worldX, float worldZ, float size)
+        {
+            // The offsets keep this away from Perlin's zero at integer coordinates,
+            // which would otherwise put a predictable seam through the map origin.
+            float a = Mathf.PerlinNoise(worldX / size + 31.7f, worldZ / size + 17.3f);
+            float b = Mathf.PerlinNoise(worldX / (size * 0.45f) + 5.1f, worldZ / (size * 0.45f) + 23.9f);
+
+            return Mathf.Clamp01(a * 0.7f + b * 0.3f);
         }
 
         /// <summary>

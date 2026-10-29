@@ -59,6 +59,18 @@ Flow is computed from the heightmap by accumulation — every cell passes water 
 its lower neighbours, so a cell's total is the area draining through it. No erosion
 simulation is needed, which is why it works on terrain this package did not create.
 
+### Macro variation
+
+Rules apply the same way everywhere, so a grass band covers a four-kilometre terrain
+identically from one side to the other. That uniformity is what reads as generated, more
+than any single transition does.
+
+**Macro Variation** adds a very large noise field that shifts the balance between layers
+across the map, so regions emerge where one layer leads and another recedes — lusher here,
+barer there. **Region Size** should be large, a few hundred metres at least: the point is
+variation across the landscape rather than within one view. The base layer is left out,
+since varying the floor would reintroduce the gaps it exists to prevent.
+
 ### Noise masks
 
 Bands alone produce clean contour lines, which read as a topographic map rather than
