@@ -24,6 +24,18 @@ namespace CustomTools.TerrainPainting
         [Tooltip("Paint this rule at all. Off keeps it in the list without affecting the result.")]
         public bool enabled = true;
 
+        [Tooltip(
+            "Cover the whole terrain, so anything the other rules do not claim shows " +
+            "this layer. Its bands still apply where they match, giving it more weight there.")]
+        public bool isBaseLayer = false;
+
+        /// <summary>
+        /// Weight a base layer holds on ground its own bands do not match. Low enough
+        /// that any rule which does claim a cell wins it outright, but never zero: that
+        /// is what stops a gap in the rules becoming an untextured hole.
+        /// </summary>
+        public const float BaseLayerFloor = 0.02f;
+
         // --- height ---------------------------------------------------------
 
         [Tooltip("Restrict this layer to a height band.")]
@@ -86,6 +98,12 @@ namespace CustomTools.TerrainPainting
         {
             if (!enabled || strength <= 0f) return 0f;
 
+            // A base layer falls back to a floor rather than zero wherever its bands do
+            // not match, so ground no rule claims still has a layer to show. Its bands
+            // are still evaluated: a base layer is the bottom of the stack, not a rule
+            // exempt from its own settings.
+            float floor = isBaseLayer ? BaseLayerFloor * strength : 0f;
+
             float weight = strength;
 
             // Each band multiplies in, and an early exit on zero skips the rest: most
@@ -94,7 +112,7 @@ namespace CustomTools.TerrainPainting
             if (useHeight)
             {
                 weight *= Band(height, heightRange, blend);
-                if (weight <= 0f) return 0f;
+                if (weight <= 0f) return floor;
             }
 
             if (useSlope)
@@ -102,23 +120,23 @@ namespace CustomTools.TerrainPainting
                 // The blend is a 0..1 softness control, so scale it into degrees to
                 // mean the same proportion of feathering as the other bands.
                 weight *= Band(slopeDeg, slopeRange, blend * 90f);
-                if (weight <= 0f) return 0f;
+                if (weight <= 0f) return floor;
             }
 
             if (useCurvature)
             {
                 // Curvature runs -1..1, so its blend covers twice the span of height's.
                 weight *= Band(curvature, curvatureRange, blend * 2f);
-                if (weight <= 0f) return 0f;
+                if (weight <= 0f) return floor;
             }
 
             if (useFlow)
             {
                 weight *= Band(flow, flowRange, blend);
-                if (weight <= 0f) return 0f;
+                if (weight <= 0f) return floor;
             }
 
-            return weight;
+            return Mathf.Max(weight, floor);
         }
 
         /// <summary>

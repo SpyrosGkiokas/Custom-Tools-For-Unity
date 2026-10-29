@@ -95,9 +95,19 @@ share it, and **Strength** sets the ratio.
 
 **Blend** softens every band edge on that rule at once. 0 gives a hard line.
 
-Where no rule matches at all, the first layer is used, so the terrain never renders as an
-untextured hole. If you see unexpected patches of your first layer, that is a gap in the
-rules rather than a bug — check with the **Solo** view.
+### The base layer
+
+One rule should be marked **Base Layer** — the first one is by default. A base layer
+covers the whole terrain at a low weight, so anything the other rules do not claim still
+has something to show. Its own bands still apply, giving it full weight where they match.
+
+This is the usual way to think about ground: it is grass, then rock gets added on the
+steep parts, then snow on the peaks. Without a base layer, any gap in the rules renders as
+an untextured hole.
+
+If no rule is marked as the base, the first layer fills unclaimed ground as a last resort.
+That still avoids holes, but a visible patch of your first texture is then a gap in the
+rules rather than a decision — check with the **Solo** view.
 
 **Smoothing** (on the settings asset) blurs the finished weights, softening edges the
 rules' own blending leaves behind. Costs a pass per step; 0 applies the rules exactly as

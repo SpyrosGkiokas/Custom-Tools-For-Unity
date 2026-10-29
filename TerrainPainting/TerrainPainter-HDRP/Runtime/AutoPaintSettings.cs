@@ -36,7 +36,10 @@ namespace CustomTools.TerrainPainting
             {
                 new PaintRule
                 {
+                    // The base: whatever the rules below do not claim ends up as grass,
+                    // which is the usual assumption for temperate ground.
                     name = "Grass",
+                    isBaseLayer = true,
                     heightRange = new Vector2(0f, 0.55f),
                     slopeRange = new Vector2(0f, 25f),
                     blend = 0.2f

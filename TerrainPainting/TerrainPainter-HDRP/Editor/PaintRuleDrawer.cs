@@ -37,8 +37,8 @@ namespace CustomTools.TerrainPainting.EditorTools
         {
             if (!property.isExpanded) return Line + Gap;
 
-            // Header, layer, then the always-shown essentials.
-            float height = (Line + Gap) * 5f;
+            // Header, layer, base toggle, then the always-shown essentials.
+            float height = (Line + Gap) * 6f;
 
             if (AdvancedOpen(property))
             {
@@ -155,6 +155,12 @@ namespace CustomTools.TerrainPainting.EditorTools
         float DrawEssentials(Rect row, SerializedProperty property, SerializedProperty layer)
         {
             EditorGUI.PropertyField(row, layer, new GUIContent("Terrain Layer"));
+            row.y += Line + Gap;
+
+            EditorGUI.PropertyField(
+                row,
+                property.FindPropertyRelative("isBaseLayer"),
+                new GUIContent("Base Layer", "Fills anything the other rules do not claim."));
             row.y += Line + Gap;
 
             DrawBandRow(
@@ -327,6 +333,13 @@ namespace CustomTools.TerrainPainting.EditorTools
             {
                 var r = property.FindPropertyRelative("flowRange").vector2Value;
                 parts.Add(Mathf.Min(r.x, r.y) > 0.4f ? "wet" : "dry");
+            }
+
+            if (property.FindPropertyRelative("isBaseLayer").boolValue)
+            {
+                // A base layer covers the gaps whatever its bands say, so its summary
+                // has to lead with that rather than listing bands that only add weight.
+                return parts.Count == 0 ? "base · everywhere" : "base · " + string.Join(" · ", parts);
             }
 
             return parts.Count == 0 ? "everywhere" : string.Join(" · ", parts);

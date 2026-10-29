@@ -58,6 +58,12 @@ namespace CustomTools.TerrainPainting
                         float w = rules[i].Evaluate(height, slope, curvature, flow);
                         if (w > 0f) w *= rules[i].NoiseMask(worldX, worldZ);
 
+                        // The noise mask must not cut a base layer below its floor:
+                        // that floor is what guarantees every cell has a layer, and
+                        // noise eating into it would put the holes back.
+                        if (rules[i].isBaseLayer)
+                            w = Mathf.Max(w, PaintRule.BaseLayerFloor * rules[i].strength);
+
                         weights[i] = w;
                         total += w;
                     }
@@ -69,10 +75,11 @@ namespace CustomTools.TerrainPainting
                     }
                     else
                     {
-                        // No rule claims this cell. Falling back to the first layer
-                        // keeps the terrain textured: an all-zero cell renders as an
-                        // untextured hole, which reads as a bug rather than a gap in
-                        // the rules.
+                        // Nothing claimed this cell at all, which means no rule is
+                        // marked as the base - a base layer's floor would have caught
+                        // it. Falling back to the first layer keeps the terrain
+                        // textured, since an all-zero cell renders as an untextured
+                        // hole that reads as a bug rather than a gap in the rules.
                         map[y, x, 0] = 1f;
                     }
                 }
