@@ -160,10 +160,25 @@ it — that is the point of the folders being independent. When this folder is p
 editor script adds the assembly reference and defines `CUSTOMTOOLS_BIOMES`, which is what
 makes the painter's biome fields appear. You will see one script recompile the first time.
 
-If you later **delete** this folder, those two edits stay behind and the painter fails to
-compile on a missing `BiomeMap`. The fix is to remove `CUSTOMTOOLS_BIOMES` from
-**Project Settings > Player > Scripting Define Symbols**, and `CustomTools.TerrainBiomes`
-from the painter's two `.asmdef` files.
+The two edits are kept in step: the define is only set while the reference is actually
+there, and is taken off again if the reference goes away. That matters because the define
+is the half that breaks things on its own — with it set and the reference missing, the
+painter does not compile, and a tool that does not compile has no **Create** menu entry
+and no component, which looks nothing like a missing assembly reference.
+
+Two consequences worth knowing:
+
+- **This repo does not commit the reference**, since a painter whose `.asmdef` required
+  this assembly would not compile for anyone who copied only the painter. So in a project
+  with both folders, the painter's two `.asmdef` files will show as locally modified. That
+  is correct — do not commit them. `git update-index --skip-worktree` on the pair quiets it.
+- **If you revert that reference while Unity is closed**, the define is still set on the
+  next load, and the define check puts it right rather than leaving you with a painter that
+  will not build. You will see a warning saying so.
+
+If you **delete** this folder, the check goes with it, so clear `CUSTOMTOOLS_BIOMES` from
+**Project Settings > Player > Scripting Define Symbols** by hand, and remove
+`CustomTools.TerrainBiomes` from the painter's two `.asmdef` files if it is still there.
 
 ## Sampling from script
 

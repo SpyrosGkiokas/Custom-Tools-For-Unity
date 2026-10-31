@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
@@ -18,8 +17,12 @@ namespace CustomTools.TerrainBiomes.EditorTools
     /// are plain folders, so the wiring is done here instead - the tool that creates the
     /// dependency is the one that declares it.
     ///
-    /// Removing this folder leaves both edits behind, and the painter then fails to
-    /// compile on a missing BiomeMap. The fix is in the warning that case logs.
+    /// The define is kept conditional on the references actually being present, in both
+    /// directions: if a consumer loses its reference while the define stands, that
+    /// consumer stops compiling and cannot put itself right, since the code that would
+    /// is in an assembly that no longer builds. Removing this folder takes the whole
+    /// check with it, so clearing the define by hand is still the fix there -
+    /// Project Settings > Player > Scripting Define Symbols.
     /// </summary>
     [InitializeOnLoad]
     static class BiomeDefineSetup
@@ -42,17 +45,42 @@ namespace CustomTools.TerrainBiomes.EditorTools
 
         static BiomeDefineSetup()
         {
-            // References first: the define is what makes the painter's biome code
-            // compile, so setting it before the reference exists would mean one failed
-            // compile before the next load fixes it.
+            // The define and the references have to agree, and the define is the half
+            // that breaks things on its own: it is what makes the painter's biome code
+            // compile, so with the define set and the reference missing the painter does
+            // not build at all - and a tool that does not build has no Create menu entry
+            // and no component, which looks nothing like a missing reference.
+            //
+            // So the reference is the condition, not just the first step. Every consumer
+            // present must have it before the define goes on, and the define comes off
+            // again if that stops being true - which is what happens when the reference
+            // is reverted by hand or by version control, since an asmdef is a file in
+            // the project like any other.
             bool changed = AddReferences();
 
-            if (EnsureDefine()) changed = true;
-
-            // Both edits trigger their own recompile. Each is guarded by a check for
-            // work actually needed, so a steady state does nothing and this does not
-            // become a reload loop.
             if (changed) AssetDatabase.Refresh();
+
+            // Re-read from disk rather than trusting what AddReferences just wrote: a
+            // write that failed, or one a hook reverted in between, must not leave the
+            // define standing on a reference that is not there.
+            if (SetDefine(AllConsumersReference())) AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// Whether every consumer in the project references this assembly. True when
+        /// none are present, since there is then nothing to be out of step with.
+        /// </summary>
+        static bool AllConsumersReference()
+        {
+            foreach (string consumer in Consumers)
+            {
+                string path = FindAsmdef(consumer);
+                if (path == null) continue;
+
+                if (!System.IO.File.ReadAllText(path).Contains(BiomeAssembly)) return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -138,20 +166,40 @@ namespace CustomTools.TerrainBiomes.EditorTools
         }
 
         /// <summary>
-        /// Defines CUSTOMTOOLS_BIOMES for the active build target, if it is not already.
-        /// Returns whether it was added.
+        /// Adds or removes CUSTOMTOOLS_BIOMES for the active build target, to match
+        /// <paramref name="wanted"/>. Returns whether anything changed, so the caller
+        /// only refreshes when there is a reason to.
+        ///
+        /// Removal is the case that matters: leaving the define set while a consumer has
+        /// lost its reference is what stops that consumer compiling, and it cannot fix
+        /// itself from there, because the code that would do it lives in an assembly
+        /// that no longer builds.
         /// </summary>
-        static bool EnsureDefine()
+        static bool SetDefine(bool wanted)
         {
             var target = NamedBuildTarget.FromBuildTargetGroup(
                 BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget));
 
             PlayerSettings.GetScriptingDefineSymbols(target, out string[] defines);
 
-            if (defines != null && defines.Contains(Define)) return false;
+            var current = new List<string>(defines ?? new string[0]);
+            bool present = current.Contains(Define);
 
-            var updated = new List<string>(defines ?? new string[0]) { Define };
-            PlayerSettings.SetScriptingDefineSymbols(target, updated.ToArray());
+            if (present == wanted) return false;
+
+            if (wanted) current.Add(Define);
+            else current.RemoveAll(d => d == Define);
+
+            PlayerSettings.SetScriptingDefineSymbols(target, current.ToArray());
+
+            if (!wanted)
+            {
+                Debug.LogWarning(
+                    $"Terrain Biomes removed {Define}, because an assembly that uses it no " +
+                    $"longer references {BiomeAssembly}. Biome support is off until the " +
+                    "reference is back. If this folder is still in the project, the " +
+                    "reference was most likely reverted outside Unity.");
+            }
 
             return true;
         }
