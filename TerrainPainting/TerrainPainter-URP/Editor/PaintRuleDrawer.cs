@@ -63,9 +63,56 @@ namespace CustomTools.TerrainPaintingURP.EditorTools
 
                 // Patch size, amount, variation.
                 if (property.FindPropertyRelative("useNoiseMask").boolValue) rows += 3;
+
+                // The biome toggle, drawn only when a map is assigned - a rule cannot be
+                // confined to a biome that nothing defines.
+                if (BiomeNames(property) != null)
+                {
+                    rows += 1;
+
+                    // Which biome, and the edge falloff.
+                    if (property.FindPropertyRelative("useBiome").boolValue) rows += 2;
+                }
             }
 
             return rows;
+        }
+
+        /// <summary>
+        /// Names of the biomes available to this rule, or null when no biome map is in
+        /// use - which is the normal case, and the reason the biome controls appear only
+        /// when they can do something.
+        ///
+        /// Read from the painter being inspected rather than from the rule, because a
+        /// rule set is an asset shared between terrains and does not know which biome
+        /// map any of them was painted with.
+        /// </summary>
+        static string[] BiomeNames(SerializedProperty property)
+        {
+#if CUSTOMTOOLS_BIOMES
+            foreach (var target in property.serializedObject.targetObjects)
+            {
+                var painter = target as TerrainAutoPainter;
+                var map = painter != null ? painter.biomeMap : null;
+                if (map == null || map.biomes == null || map.biomes.Length == 0) continue;
+
+                var names = new string[map.biomes.Length];
+                for (int i = 0; i < map.biomes.Length; i++)
+                {
+                    var biome = map.biomes[i];
+                    string label = biome != null && !string.IsNullOrEmpty(biome.name)
+                        ? biome.name
+                        : $"Biome {i}";
+
+                    // The index is shown alongside the name: it is what the rule stores,
+                    // so it is what matters when two biomes share a name.
+                    names[i] = $"{i}  {label}" + (biome != null && !biome.enabled ? "  (off)" : "");
+                }
+
+                return names;
+            }
+#endif
+            return null;
         }
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
@@ -227,6 +274,50 @@ namespace CustomTools.TerrainPaintingURP.EditorTools
             return row.y;
         }
 
+        /// <summary>
+        /// The biome binding: whether this rule is confined to one biome, which, and how
+        /// hard it gives way at the edge. Drawn only when a biome map is assigned, so a
+        /// painter not using biomes shows no trace of them.
+        /// </summary>
+        float DrawBiome(Rect row, SerializedProperty property)
+        {
+            var names = BiomeNames(property);
+            if (names == null) return row.y;
+
+            var useBiome = property.FindPropertyRelative("useBiome");
+
+            EditorGUI.PropertyField(
+                new Rect(row.x, row.y, row.width, Line),
+                useBiome,
+                new GUIContent("Limit To Biome", "Off paints this rule in every biome."));
+            row.y += Line + Gap;
+
+            if (!useBiome.boolValue) return row.y;
+
+            EditorGUI.indentLevel++;
+
+            var biomeIndex = property.FindPropertyRelative("biomeIndex");
+
+            // Popup rather than an int field: the indices mean nothing without the names
+            // beside them, and typing 9 into a map of seven biomes is a silent no-op that
+            // leaves the rule painting everywhere.
+            int current = Mathf.Clamp(biomeIndex.intValue, 0, names.Length - 1);
+            int picked = EditorGUI.Popup(
+                new Rect(row.x, row.y, row.width, Line), "Biome", current, names);
+
+            if (picked != biomeIndex.intValue) biomeIndex.intValue = picked;
+            row.y += Line + Gap;
+
+            EditorGUI.PropertyField(
+                new Rect(row.x, row.y, row.width, Line),
+                property.FindPropertyRelative("biomeFalloff"),
+                new GUIContent("Edge Falloff", "1 follows the biome map's own blend; higher confines the rule to the biome's core."));
+            row.y += Line + Gap;
+
+            EditorGUI.indentLevel--;
+            return row.y;
+        }
+
         float DrawAdvanced(Rect row, SerializedProperty property)
         {
             string key = AdvancedKey(property);
@@ -300,6 +391,8 @@ namespace CustomTools.TerrainPaintingURP.EditorTools
 
                 EditorGUI.indentLevel--;
             }
+
+            row.y = DrawBiome(row, property);
 
             EditorGUI.indentLevel--;
             return row.y;
@@ -414,12 +507,30 @@ namespace CustomTools.TerrainPaintingURP.EditorTools
                 parts.Add(Mathf.Min(r.x, r.y) > 0.4f ? "wet" : "dry");
             }
 
+            // The biome leads the summary when there is one: it says where the rule
+            // applies at all, which the bands then narrow down within it.
+            string biome = null;
+            if (property.FindPropertyRelative("useBiome").boolValue)
+            {
+                var names = BiomeNames(property);
+                int index = property.FindPropertyRelative("biomeIndex").intValue;
+
+                biome = names != null && index >= 0 && index < names.Length
+                    ? names[index].Substring(names[index].IndexOf(' ') + 1).Trim()
+                    : $"biome {index}";
+            }
+
             if (property.FindPropertyRelative("isBaseLayer").boolValue)
             {
                 // A base layer covers the gaps whatever its bands say, so its summary
                 // has to lead with that rather than listing bands that only add weight.
-                return parts.Count == 0 ? "base · everywhere" : "base · " + string.Join(" · ", parts);
+                string scope = biome ?? "everywhere";
+                return parts.Count == 0
+                    ? $"base · {scope}"
+                    : $"base · {scope} · " + string.Join(" · ", parts);
             }
+
+            if (biome != null) parts.Insert(0, biome);
 
             return parts.Count == 0 ? "everywhere" : string.Join(" · ", parts);
         }

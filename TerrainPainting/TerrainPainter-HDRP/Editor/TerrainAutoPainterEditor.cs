@@ -94,6 +94,8 @@ namespace CustomTools.TerrainPainting.EditorTools
         {
             EditorGUILayout.PropertyField(serializedObject.FindProperty("settings"));
 
+            DrawBiomeField();
+
             var terrain = _painter.Terrain;
             if (terrain == null || terrain.terrainData == null)
             {
@@ -110,6 +112,50 @@ namespace CustomTools.TerrainPainting.EditorTools
                 "Terrain",
                 $"{size.x:0}×{size.z:0}m, {size.y:0}m tall, {data.heightmapResolution}px heightmap",
                 EditorStyles.miniLabel);
+        }
+
+        /// <summary>
+        /// The biome map slot, plus the two things that go wrong with it: rules asking
+        /// for a biome with no map to resolve it against, and a map assigned while no
+        /// rule uses it. Both paint a plausible-looking result that silently ignores the
+        /// biome setup, which is the kind of thing lost for an hour before it is noticed.
+        /// </summary>
+        void DrawBiomeField()
+        {
+#if CUSTOMTOOLS_BIOMES
+            var biomeProperty = serializedObject.FindProperty("biomeMap");
+            if (biomeProperty == null) return;
+
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(biomeProperty);
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+                RebuildNow();
+            }
+
+            int bound = 0;
+            foreach (var rule in _painter.ActiveRules())
+                if (rule.useBiome) bound++;
+
+            if (_painter.BiomeCount == 0 && bound > 0)
+            {
+                EditorGUILayout.HelpBox(
+                    $"{bound} rule(s) are limited to a biome, but no biome map is assigned. " +
+                    "Those limits are ignored, so the rules paint everywhere.",
+                    MessageType.Warning);
+            }
+            else if (_painter.BiomeCount > 0 && bound == 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "A biome map is assigned but no rule is limited to a biome, so it has " +
+                    "no effect yet. Set \"Limit To Biome\" under a rule's Advanced section.",
+                    MessageType.Info);
+            }
+#else
+            // Without the biome folder in the project there is no map to assign, and a
+            // disabled slot for a tool the user may not have would be noise.
+#endif
         }
 
         /// <summary>
@@ -359,6 +405,15 @@ namespace CustomTools.TerrainPainting.EditorTools
                     $"Analysed at {_analysis.Resolution}px; painting uses the terrain's full heightmap.",
                     EditorStyles.miniLabel);
             }
+
+            // Which biome a rule is confined to is invisible in the Layers view, so say
+            // whether biomes are affecting the result at all.
+            if (_painter.BiomeCount > 0)
+            {
+                EditorGUILayout.LabelField(
+                    $"Biome map active: {_painter.BiomeCount} biomes, sampled in world space.",
+                    EditorStyles.miniLabel);
+            }
         }
 
         /// <summary>Macro size when the setting is on, 0 when it is off or unassigned.</summary>
@@ -392,7 +447,9 @@ namespace CustomTools.TerrainPainting.EditorTools
                     PreviewResolution,
                     _painter.settings != null ? _painter.settings.smoothing : 0,
                     MacroSize(),
-                    MacroStrength())
+                    MacroStrength(),
+                    _painter.BiomeWeights(),
+                    _painter.BiomeCount)
                 : null;
 
             _layerColors = ResolveLayerColors(active);

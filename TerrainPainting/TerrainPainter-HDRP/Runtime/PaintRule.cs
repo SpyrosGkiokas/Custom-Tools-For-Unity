@@ -68,6 +68,25 @@ namespace CustomTools.TerrainPainting
         [Tooltip("Flow band. 0 is dry ground that sheds water, 1 a channel that collects it.")]
         public Vector2 flowRange = new Vector2(0f, 1f);
 
+        // --- biome ----------------------------------------------------------
+
+        [Tooltip(
+            "Restrict this layer to one biome from the painter's Biome Map. Off paints " +
+            "the rule in every biome, which is what a shared layer like rock wants.")]
+        public bool useBiome = false;
+
+        [Tooltip(
+            "Index of the biome in the Biome Map's list. The painter's Inspector shows " +
+            "these by name; this is the index so a rule set does not break when a biome " +
+            "is renamed.")]
+        [Min(0)] public int biomeIndex = 0;
+
+        [Tooltip(
+            "How sharply this rule gives way at a biome edge. 1 follows the Biome Map's " +
+            "own boundary softness, higher values confine the rule closer to the biome's " +
+            "core, leaving a wider band where the neighbouring biome's rules take over.")]
+        [Range(1f, 4f)] public float biomeFalloff = 1f;
+
         // --- shaping --------------------------------------------------------
 
         [Tooltip("Softness of every band edge. 0 gives a hard line, higher values a wider fade.")]
@@ -154,6 +173,33 @@ namespace CustomTools.TerrainPainting
             if (value < min) return Mathf.Clamp01(1f - (min - value) / blend);
             if (value > max) return Mathf.Clamp01(1f - (value - max) / blend);
             return 1f;
+        }
+
+        /// <summary>
+        /// This rule's share of a cell given the biome weights there. Returns 1 when the
+        /// rule is not bound to a biome, so callers need no special case.
+        ///
+        /// Taking the biome's own weight rather than testing the dominant biome is what
+        /// keeps boundaries soft: the Biome Map already blends its biomes across a
+        /// transition, so a rule multiplied by that weight fades out exactly where the
+        /// neighbouring biome's rules fade in. Picking a winner per cell would throw
+        /// that away and draw the biome edge as a hard line through the terrain.
+        /// </summary>
+        /// <param name="biomeWeights">
+        /// Normalised weights, one per biome in the map, or null when no map is in use.
+        /// </param>
+        public float BiomeMask(float[] biomeWeights)
+        {
+            if (!useBiome || biomeWeights == null) return 1f;
+            if (biomeIndex < 0 || biomeIndex >= biomeWeights.Length) return 1f;
+
+            float w = biomeWeights[biomeIndex];
+            if (w <= 0f) return 0f;
+
+            // The falloff is a power rather than a remapped band: weights are already
+            // normalised, so raising one to a power narrows where it leads without
+            // needing to know what the others are doing.
+            return biomeFalloff > 1f ? Mathf.Pow(w, biomeFalloff) : w;
         }
 
         /// <summary>

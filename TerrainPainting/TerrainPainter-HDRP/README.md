@@ -78,6 +78,36 @@ ground. Turn on **Noise Mask** for a layer and its edges break up. **Size** is i
 smaller is patchier — and **Seed** offsets the pattern so two layers using the same size
 do not break up identically.
 
+## Biomes
+
+By default one rule set covers the whole terrain, the same way everywhere. A **biome map**
+divides the world into climate regions instead, so a rule can be limited to one of them —
+desert here, alpine there — without maintaining a separate settings asset per region.
+
+This needs the [Terrain Biomes](../../TerrainBiomes/TerrainBiomes-HDRP/) folder in the
+project. With it present, a **Biome Map** slot appears on the painter and each rule gains
+a **Limit To Biome** option under its Advanced section; without it, the painter compiles
+and works exactly as before.
+
+A rule limited to a biome paints only where that biome has weight. A rule left unlimited
+paints everywhere, which is what a shared layer like cliff rock wants — biomes are for the
+layers that differ, not for every layer.
+
+The rule's own height, slope, curvature and flow bands still apply within the biome. A
+biome selects where a rule *may* paint; it does not paint on the rule's behalf. So an
+alpine snow rule still needs its height band — the biome only stops it appearing in the
+desert.
+
+**Edge Falloff** sets how sharply a rule gives way at a biome edge. 1 follows the biome
+map's own boundary blending, which is usually what you want. Higher values confine the
+rule closer to the biome's core and widen the band where the neighbouring biome's rules
+take over, which helps when two biomes' layers are similar enough that a long crossfade
+reads as mud.
+
+Biomes are sampled at the terrain's **world position**, so a region continues across
+adjacent terrains rather than restarting on each one. The biome map's own README covers
+the climate model and its previews.
+
 ## Reading the preview
 
 The toolbar switches what the preview shows. The channel views matter because the inputs
@@ -136,8 +166,9 @@ moment you release the slider.
 ## Limitations
 
 - **Splatmaps only.** Detail/grass and tree scattering are not driven by these rules yet.
-- **No biomes.** One rule set covers the whole terrain. Regional variation — desert here,
-  alpine there — is not in this version.
+- **Biomes vary texturing, not shape.** With a biome map, a desert region is painted
+  differently from its alpine neighbour, but it is not flatter: the generator does not
+  read biome maps yet.
 - **Weight blending, not height blending.** Transitions crossfade between layers. Making
   gravel interlock through grass at an edge needs each layer's height texture and a custom
   shader.

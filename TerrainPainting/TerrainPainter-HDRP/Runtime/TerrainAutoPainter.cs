@@ -16,6 +16,13 @@ namespace CustomTools.TerrainPainting
         [Tooltip("The rules to paint with. Create one via Assets > Create > Custom Tools.")]
         public AutoPaintSettings settings;
 
+#if CUSTOMTOOLS_BIOMES
+        [Tooltip(
+            "Optional. Divides the world into climate regions, so rules bound to a biome " +
+            "paint only in that biome. Leave empty to paint one rule set everywhere.")]
+        public TerrainBiomes.BiomeMap biomeMap;
+#endif
+
         /// <summary>The Terrain this component paints.</summary>
         public Terrain Terrain => GetComponent<Terrain>();
 
@@ -34,7 +41,10 @@ namespace CustomTools.TerrainPainting
             float[,] heights = ReadHeights(data, sampleRes);
 
             var size = data.size;
-            return TerrainAnalysis.Analyse(heights, size.x, size.y);
+
+            // The terrain's own position, so world-space consumers - biome sampling -
+            // see where this tile actually sits rather than assuming the origin.
+            return TerrainAnalysis.Analyse(heights, size.x, size.y, null, transform.position);
         }
 
         /// <summary>
@@ -61,6 +71,37 @@ namespace CustomTools.TerrainPainting
             }
 
             return reduced;
+        }
+
+        /// <summary>
+        /// Number of biomes the assigned map defines, or 0 when biomes are not in use.
+        /// The painter sizes its weight buffer from this, and the Inspector uses it to
+        /// offer biome names on a rule.
+        /// </summary>
+        public int BiomeCount
+        {
+#if CUSTOMTOOLS_BIOMES
+            get => biomeMap != null && biomeMap.biomes != null ? biomeMap.biomes.Length : 0;
+#else
+            get => 0;
+#endif
+        }
+
+        /// <summary>
+        /// A sampler the painter can call for biome weights, or null when no map is
+        /// assigned. Handing over a delegate keeps the painting code free of any
+        /// reference to the biome tool.
+        /// </summary>
+        public SplatmapPainter.BiomeSampler BiomeWeights()
+        {
+#if CUSTOMTOOLS_BIOMES
+            if (biomeMap == null || BiomeCount == 0) return null;
+
+            var map = biomeMap;
+            return (x, z, height, weights) => map.SampleWeights(x, z, height, weights);
+#else
+            return null;
+#endif
         }
 
         /// <summary>Rules that will paint, in the order their layers are assigned.</summary>
@@ -134,7 +175,9 @@ namespace CustomTools.TerrainPainting
                 alphaRes,
                 settings.smoothing,
                 settings.macroVariation ? settings.macroSize : 0f,
-                settings.macroVariation ? settings.macroStrength : 0f);
+                settings.macroVariation ? settings.macroStrength : 0f,
+                BiomeWeights(),
+                BiomeCount);
             if (splat == null)
             {
                 error = "Painting produced no weights.";

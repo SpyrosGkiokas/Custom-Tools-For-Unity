@@ -9,6 +9,16 @@ namespace CustomTools.TerrainPaintingURP
     /// serves the Inspector preview, the paint operation and any future caller without
     /// one of them having to fabricate a settings asset to ask a question.
     /// </summary>
+    /// <summary>
+    /// Fills <paramref name="weights"/> with the biome weights at a world position,
+    /// normalised to sum to 1.
+    ///
+    /// A delegate rather than a BiomeMap parameter, so this assembly does not depend on
+    /// the biome tool: the painter works copied on its own, and gains biome support when
+    /// the biome folder is present to supply one of these.
+    /// </summary>
+    public delegate void BiomeSampler(float worldX, float worldZ, float heightMetres, float[] weights);
+
     public static class SplatmapPainter
     {
         /// <summary>
@@ -25,7 +35,9 @@ namespace CustomTools.TerrainPaintingURP
             int alphamapResolution,
             int smoothing = 0,
             float macroSize = 0f,
-            float macroStrength = 0f)
+            float macroStrength = 0f,
+            BiomeSampler biomes = null,
+            int biomeCount = 0)
         {
             if (analysis == null) throw new System.ArgumentNullException(nameof(analysis));
             if (rules == null || rules.Length == 0) return null;
@@ -36,6 +48,12 @@ namespace CustomTools.TerrainPaintingURP
 
             // Scratch buffer for one cell's weights, reused across cells.
             var weights = new float[count];
+
+            // One buffer for the biome weights too, for the same reason: this is sampled
+            // once per alphamap cell, and allocating there would mean a collection every
+            // few thousand cells.
+            bool useBiomes = biomes != null && biomeCount > 0;
+            var biomeWeights = useBiomes ? new float[biomeCount] : null;
 
             for (int y = 0; y < res; y++)
             {
@@ -53,6 +71,19 @@ namespace CustomTools.TerrainPaintingURP
                     float worldX = nx * analysis.WorldSize;
                     float worldZ = ny * analysis.WorldSize;
 
+                    // Biomes are sampled in world space, including the terrain's own
+                    // position, so a biome region crosses tile boundaries instead of
+                    // restarting at each terrain - which would draw the tile grid into
+                    // the result on a multi-terrain world.
+                    if (useBiomes)
+                    {
+                        biomes(
+                            analysis.WorldOrigin.x + worldX,
+                            analysis.WorldOrigin.z + worldZ,
+                            analysis.WorldOrigin.y + height * analysis.WorldHeight,
+                            biomeWeights);
+                    }
+
                     float total = 0f;
 
                     // One macro value per cell, shared by every rule. Scaling all the
@@ -66,6 +97,11 @@ namespace CustomTools.TerrainPaintingURP
                     {
                         float w = rules[i].Evaluate(height, slope, curvature, flow);
                         if (w > 0f) w *= rules[i].NoiseMask(worldX, worldZ);
+
+                        // Applied after the bands so a rule confined to a biome still
+                        // honours its own height and slope within it: a biome selects
+                        // where a rule may paint, it does not paint on the rule's behalf.
+                        if (w > 0f && useBiomes) w *= rules[i].BiomeMask(biomeWeights);
 
                         // Alternating rules favour opposite ends of the macro value, so
                         // regions emerge where one layer leads and its neighbour recedes
