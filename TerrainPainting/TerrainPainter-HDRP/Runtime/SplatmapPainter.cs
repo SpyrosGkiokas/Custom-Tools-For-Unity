@@ -9,18 +9,19 @@ namespace CustomTools.TerrainPainting
     /// serves the Inspector preview, the paint operation and any future caller without
     /// one of them having to fabricate a settings asset to ask a question.
     /// </summary>
-    /// <summary>
-    /// Fills <paramref name="weights"/> with the biome weights at a world position,
-    /// normalised to sum to 1.
-    ///
-    /// A delegate rather than a BiomeMap parameter, so this assembly does not depend on
-    /// the biome tool: the painter works copied on its own, and gains biome support when
-    /// the biome folder is present to supply one of these.
-    /// </summary>
-    public delegate void BiomeSampler(float worldX, float worldZ, float heightMetres, float[] weights);
-
     public static class SplatmapPainter
     {
+        /// <summary>
+        /// Fills <paramref name="weights"/> with the biome weights at a world position,
+        /// normalised to sum to 1.
+        ///
+        /// A delegate rather than a BiomeMap parameter, so this assembly does not depend
+        /// on the biome tool: the painter works copied on its own, and gains biome
+        /// support when the biome folder is present to supply one of these.
+        /// </summary>
+        public delegate void BiomeSampler(
+            float worldX, float worldZ, float heightMetres, float[] weights);
+
         /// <summary>
         /// Builds the weight map Unity expects: indexed [y, x, layer], with the weights
         /// at each cell summing to 1.
