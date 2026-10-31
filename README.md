@@ -83,6 +83,24 @@ each layer belongs and paint the whole thing in one click.
 
 → **[HDRP version](TerrainPainting/TerrainPainter-HDRP/)** · **[URP version](TerrainPainting/TerrainPainter-URP/)**
 
+### 🌍 Terrain Biomes
+
+Climate regions for a world, so one rule set stops covering everything identically. The
+auto painter reads a biome map to paint desert here and alpine there — the same terrain,
+textured by where you are in the world.
+
+- **Temperature and moisture**, not one noise value split into bands — which is what puts
+  desert beside savanna and tundra beside taiga, rather than making every neighbour arbitrary
+- Sampled in **world space**, so a region crosses terrain boundaries instead of restarting
+  on each tile — the thing that matters on a map too large for one `Terrain`
+- Height cooling, so mountains turn alpine on their own rather than by hand
+- Soft, noise-broken boundaries, because a hard climate switch is the failure everyone sees
+- Two previews — where the biomes land, and the climate space itself — plus each biome's
+  share of the world, which is how you catch one that never occurs
+- Reads nothing and writes nothing: it answers questions about positions
+
+→ **[HDRP version](TerrainBiomes/TerrainBiomes-HDRP/)** · **[URP version](TerrainBiomes/TerrainBiomes-URP/)**
+
 ---
 
 ## Getting started
