@@ -99,6 +99,16 @@ textured by where you are in the world.
   share of the world, which is how you catch one that never occurs
 - Reads nothing and writes nothing: it answers questions about positions
 
+<p align="center">
+  <img width="380" alt="Biome bands tuned against the world preview, with each biome's share of the map"
+       src="https://github.com/user-attachments/assets/43bfba9f-576a-41b1-9b16-ee648fdd68d0" />
+</p>
+
+<p align="center">
+  <em>Biomes claim a band of temperature and moisture, and the world preview shows where
+  that lands — soft, broken boundaries, and the share of the map each one holds.</em>
+</p>
+
 → **[HDRP version](TerrainBiomes/TerrainBiomes-HDRP/)** · **[URP version](TerrainBiomes/TerrainBiomes-URP/)**
 
 ---
