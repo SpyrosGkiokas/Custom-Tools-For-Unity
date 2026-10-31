@@ -42,6 +42,14 @@ namespace CustomTools.TerrainPaintingURP
         public float WorldHeight { get; private set; }
 
         /// <summary>
+        /// Where this terrain sits in the scene, in metres. Only consumers working in
+        /// world space need it - biome sampling does, since a climate region has to
+        /// continue across a tiled world rather than restart at each terrain.
+        /// Defaults to the origin, which is correct for a single terrain placed there.
+        /// </summary>
+        public Vector3 WorldOrigin { get; private set; }
+
+        /// <summary>
         /// Analyses a heightmap. <paramref name="worldSize"/> and
         /// <paramref name="worldHeight"/> are the terrain's metre dimensions: slope is
         /// meaningless without them, since the same normalized heights describe gentle
@@ -56,7 +64,8 @@ namespace CustomTools.TerrainPaintingURP
             float[,] heights,
             float worldSize,
             float worldHeight,
-            float[,] externalFlow = null)
+            float[,] externalFlow = null,
+            Vector3 worldOrigin = default)
         {
             if (heights == null) throw new System.ArgumentNullException(nameof(heights));
 
@@ -69,7 +78,8 @@ namespace CustomTools.TerrainPaintingURP
                 Height = heights,
                 Resolution = res,
                 WorldSize = Mathf.Max(0.0001f, worldSize),
-                WorldHeight = Mathf.Max(0.0001f, worldHeight)
+                WorldHeight = Mathf.Max(0.0001f, worldHeight),
+                WorldOrigin = worldOrigin
             };
 
             analysis.BuildSlopeAndCurvature();
